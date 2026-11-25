@@ -33,6 +33,9 @@ main{max-width:640px;margin:0 auto;padding:10px 10px 14px;display:grid;gap:10px}
 .min small{font-size:12px;font-weight:700;margin-left:2px}
 .min.now{color:var(--red)}
 .mid{min-width:0}
+.fav{color:#e0a100;font-size:13px;margin-left:4px}
+.other .chip{opacity:.8}.other .min{font-size:18px}
+.sec{font-size:12px;font-weight:700;color:var(--mute);padding:10px 0 4px;border-top:1px solid var(--line)}
 .chips{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin:0 -2px;padding:0 2px}.chips::-webkit-scrollbar{display:none}
 .chips button{flex:none;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:999px;height:34px;padding:0 13px;font:700 13px Figtree,system-ui,sans-serif}
 .chips button[aria-pressed=true]{background:var(--ink);color:var(--card);border-color:var(--ink)}
@@ -134,7 +137,7 @@ function getMeta() {
   });
 }
 const DEF = {
-  ida: [{ id: 50, lines: [1200] }, { id: 94, lines: [1400] }, { id: 217, lines: [2200] }],
+  ida: [{ id: 50, lines: [1200] }, { id: 94, lines: [1400] }],
   vuelta: [{ id: 40, lines: [1200, 1400] }, { id: 269, lines: [1400] }, { id: 120, lines: [1400, 1500, 2000] }]
 };
 const FALL_STOPS = { 50: 'Rda. de Nelle, 109', 94: 'Rda. de Outeiro, 249', 217: 'Av. de Fisterra, 192', 40: 'Av. de Oza, 7', 269: 'Rda. de Outeiro, Pérez Ardá', 120: 'Rda. de Outeiro, 126' };
@@ -153,10 +156,10 @@ const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toL
 const hhmm = (t) => new Date(t).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
 
 function load() {
-  try { const s = JSON.parse(localStorage.getItem('mibus-cfg-v3')); if (s && s.ida && s.vuelta) return s; } catch (e) {}
+  try { const s = JSON.parse(localStorage.getItem('mibus-cfg-v4')); if (s && s.ida && s.vuelta) return s; } catch (e) {}
   return JSON.parse(JSON.stringify(DEF));
 }
-function save() { try { localStorage.setItem('mibus-cfg-v3', JSON.stringify(cfg)); } catch (e) {} }
+function save() { try { localStorage.setItem('mibus-cfg-v4', JSON.stringify(cfg)); } catch (e) {} }
 function stopName(id) { return meta.stops[id] || FALL_STOPS[id] || ('Parada ' + id); }
 function lineInfo(id) {
   const m = meta.lines[id] || {}, f = FALL_LINES[id] || {};
@@ -196,9 +199,9 @@ function render() {
     const present = new Set((d && d.lineas || []).map((l) => l.linea));
     (s.lines || []).forEach((x) => present.add(x));
     const toggles = [...present].sort((a, b) => a - b).map((lid) =>
-      '<button class="tg" data-i="' + i + '" data-l="' + lid + '" aria-pressed="' + (!s.lines || s.lines.indexOf(lid) >= 0) + '">Línea ' + esc(lineInfo(lid).n) + '</button>').join('');
+      '<button class="tg" data-i="' + i + '" data-l="' + lid + '" aria-pressed="' + (!s.lines || s.lines.indexOf(lid) >= 0) + '">★ ' + esc(lineInfo(lid).n) + '</button>').join('');
     return '<section class="card"><h2>' + esc(stopName(s.id)) + '</h2><div class="sub">Parada ' + esc(s.id) +
-      (s.lines ? ' · líneas ' + s.lines.map((x) => esc(lineInfo(x).n)).join(', ') : ' · todas las líneas') + '</div>' +
+      (s.lines ? ' · favoritas ★ ' + s.lines.map((x) => esc(lineInfo(x).n)).join(', ') : ' · todas favoritas') + ' · toca una línea para marcarla</div>' +
       rows + '<div class="edit">' + toggles + '<button class="tg rm" data-rm="' + i + '">Quitar</button></div></section>';
   }).join('');
 }
@@ -217,16 +220,17 @@ function renderList(allStops) {
     if (d.err) errs.push(stopName(s.id));
     const el = (Date.now() - d.at) / 60000;
     for (const l of d.lineas || []) {
-      if (s.lines && s.lines.indexOf(l.linea) < 0) continue;
+      const fav = !s.lines || s.lines.indexOf(l.linea) >= 0;
       for (const b of l.buses || []) {
         const t = mins(b.tiempo);
         if (t - el < -1) continue;
-        all.push({ linea: l.linea, left: Math.max(0, Math.round(t - el)), at: d.at + t * 60000, dist: metres(b.distancia), stop: s.id });
+        all.push({ linea: l.linea, fav: fav, left: Math.max(0, Math.round(t - el)), at: d.at + t * 60000, dist: metres(b.distancia), stop: s.id });
       }
     }
   }
   all.sort((a, b) => a.left - b.left || a.at - b.at);
-  const first = all[0];
+  const favs = all.filter((b) => b.fav), others = all.filter((b) => !b.fav);
+  const first = favs[0];
   let hero = '';
   if (first) {
     const li = lineInfo(first.linea);
@@ -234,19 +238,22 @@ function renderList(allStops) {
       (first.left <= 1 ? '<div class="big now">Llegando</div>' : '<div class="big">' + first.left + '<small>min</small></div>') +
       '<div class="stp">' + esc(stopName(first.stop)) + '</div></div><div class="at"><b>' + hhmm(first.at) + '</b><span>a ' + esc(fmtKm(first.dist)) + '</span></div></section>';
   }
-  let rows = all.slice(1, 8).map((b) => {
+  const row = (b, cls) => {
     const li = lineInfo(b.linea);
     const km = fmtKm(b.dist);
-    return '<div class="row"><div class="chip" style="background:' + li.c + '">' + esc(li.n) + '</div>' +
-      '<div class="mid">' + (b.left <= 1 ? '<div class="min now">Llegando</div>' : '<div class="min">' + b.left + '<small>min</small></div>') +
+    return '<div class="row ' + cls + '"><div class="chip" style="background:' + li.c + '">' + esc(li.n) + '</div>' +
+      '<div class="mid">' + (b.left <= 1 ? '<div class="min now">Llegando</div>' : '<div class="min">' + b.left + '<small>min</small>' + (b.fav ? '<span class="fav" aria-label="favorita">★</span>' : '') + '</div>') +
       '<div class="stp">' + esc(stopName(b.stop)) + '</div></div>' +
       '<div class="at"><b>' + hhmm(b.at) + '</b><span>a ' + esc(km) + '</span></div></div>';
-  }).join('');
-  if (!rows && first) rows = '<div class="empty">No hay más buses próximos.</div>';
+  };
+  let rows = favs.slice(1, 8).map((b) => row(b, '')).join('');
+  const otherRows = others.slice(0, 6).map((b) => row(b, 'other')).join('');
+  if (!rows && first) rows = '<div class="empty">No hay más buses de tus líneas.</div>';
   if (!rows) rows = '<div class="empty">' + (pending ? 'Consultando…' : (errs.length === stops.length ? 'No se pudo conectar con iTranvías. Pulsa Actualizar.' : 'Sin buses próximos ahora mismo.')) + '</div>';
   const note = errs.length && errs.length < stops.length ? '<div class="err">Sin datos ahora de: ' + errs.map(esc).join(', ') + '</div>' : '';
-  $('list').innerHTML = chips + hero + '<section class="card"><h2>' + (first ? 'Después' : (tab === 'ida' ? 'Buses al trabajo' : 'Buses a casa')) + '</h2>' +
-    (chips ? '<div class="sub"></div>' : '<div class="sub">' + stops.map((s) => esc(stopName(s.id))).join(' · ') + '</div>') + note + rows + '</section>';
+  $('list').innerHTML = chips + hero + '<section class="card"><h2>' + (first ? 'Después, tus líneas ★' : (tab === 'ida' ? 'Buses al trabajo' : 'Buses a casa')) + '</h2>' +
+    (chips ? '<div class="sub"></div>' : '<div class="sub">' + stops.map((s) => esc(stopName(s.id))).join(' · ') + '</div>') + note + rows +
+    (otherRows ? '<div class="sec">Otras líneas en estas paradas</div>' + otherRows : '') + '</section>';
 }
 
 function mins(v) { if (String(v).indexOf('<') >= 0) return 0; const n = parseFloat(String(v == null ? '' : v).replace(',', '.').replace(/[^0-9.]/g, '')); return isFinite(n) ? n : 0; }
