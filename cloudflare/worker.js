@@ -330,8 +330,10 @@ async function nextBuses(trip) {
   return all.sort((a, b) => a.leave - b.leave || a.min - b.min);
 }
 
-function when(m) { return m <= 1 ? 'está llegando' : 'en ' + m + ' minutos'; }
-function leave(m) { return m <= 1 ? 'Sal ya.' : 'Sal en ' + m + (m === 1 ? ' minuto.' : ' minutos.'); }
+let NOW_MIN = 0;
+function at(m) { return 'a ' + say(fmt(NOW_MIN + m)); }
+function when(m) { return m <= 1 ? 'ahora mismo, está llegando' : at(m) + ', en ' + m + ' minutos'; }
+function leave(m) { return m <= 1 ? 'Sal ya.' : 'Sal de casa ' + at(m) + '.'; }
 
 async function alexa(req, env) {
   let body = {};
@@ -351,20 +353,21 @@ async function alexa(req, env) {
   if (intent === 'IdaIntent') trip = 'ida';
   if (intent === 'VueltaIntent') trip = 'vuelta';
 
+  NOW_MIN = madridNow().min;
   const buses = await nextBuses(trip);
   if (!buses.length) return alexaSay('Ahora mismo no tengo buses a los que te dé tiempo a llegar, o iTranvías no responde. Prueba en un momento.');
   const main = buses.filter((x) => x.main);
   if (main.length) {
     const m = main[0], alt = buses.find((x) => !x.main && x.leave < m.leave);
     let t = 'El próximo ' + m.line + ' en ' + m.stop + ' pasa ' + when(m.min) + '. ' + leave(m.leave);
-    if (main[1]) t += ' El siguiente, ' + when(main[1].min) + '.';
-    if (alt) t += ' Si quieres algo antes, el ' + alt.line + ' en ' + alt.stop + ' pasa ' + when(alt.min) + '.';
+    if (main[1]) t += ' El siguiente pasa ' + at(main[1].min) + '.';
+    if (alt) t += ' Si quieres algo antes, el ' + alt.line + ' en ' + alt.stop + ' pasa ' + at(alt.min) + '.';
     return alexaSay(t);
   }
   const [a, b, c] = buses;
-  let text = 'El próximo que te da tiempo es el ' + a.line + ' en ' + a.stop + ', ' + when(a.min) + '. ' + leave(a.leave);
-  if (b) text += ' Después, el ' + b.line + ' en ' + b.stop + ', ' + when(b.min) + '.';
-  if (c) text += ' Y el ' + c.line + ' en ' + c.stop + ', ' + when(c.min) + '.';
+  let text = 'El próximo que te da tiempo es el ' + a.line + ' en ' + a.stop + ', ' + when(a.min) + '. ' + leave(a.leave).replace('de casa', 'del trabajo');
+  if (b) text += ' Después, el ' + b.line + ' en ' + b.stop + ', ' + at(b.min) + '.';
+  if (c) text += ' Y el ' + c.line + ' en ' + c.stop + ', ' + at(c.min) + '.';
   return alexaSay(text);
 }
 
