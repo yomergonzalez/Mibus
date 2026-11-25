@@ -17,7 +17,7 @@ export default {
       const id = parseInt(url.searchParams.get('id'), 10);
       if (!id || id < 1 || id > 99999) return json({ error: 'parada inválida' }, 400);
       try {
-        const r = await fetch(API + '?dato=' + id + '&func=0', { headers: UPSTREAM_HEADERS });
+        const r = await fetch(API + '?dato=' + id + '&func=0', { headers: UPSTREAM_HEADERS, cache: 'no-store' });
         const j = JSON.parse(await r.text());
         return json({ parada: id, at: Date.now(), lineas: (j.buses && j.buses.lineas) || [] });
       } catch (e) {
@@ -307,7 +307,7 @@ async function nextBuses(trip) {
   const all = [];
   await Promise.all(ALEXA_TRIPS[trip].map(async (s) => {
     try {
-      const r = await fetch(API + '?dato=' + s.id + '&func=0', { headers: UPSTREAM_HEADERS });
+      const r = await fetch(API + '?dato=' + s.id + '&func=0', { headers: UPSTREAM_HEADERS, cache: 'no-store' });
       const j = JSON.parse(await r.text());
       for (const l of (j.buses && j.buses.lineas) || []) {
         if (s.lines.indexOf(l.linea) < 0) continue;
@@ -588,7 +588,7 @@ async function alexaConsulta(intent) {
   const parts = [];
   await Promise.all(stops.map(async (sid) => {
     try {
-      const r = await fetch(API + '?dato=' + sid + '&func=0', { headers: UPSTREAM_HEADERS });
+      const r = await fetch(API + '?dato=' + sid + '&func=0', { headers: UPSTREAM_HEADERS, cache: 'no-store' });
       const j = JSON.parse(await r.text());
       const items = [];
       for (const l of (j.buses && j.buses.lineas) || []) {
