@@ -26,27 +26,7 @@ export default {
     }
 
     if (url.pathname === '/api/meta') {
-      const cache = caches.default;
-      const key = new Request(url.origin + '/api/meta?v=2');
-      const hit = await cache.match(key);
-      if (hit) return hit;
-      try {
-        const r = await fetch(API + '?dato=20160101T000000_gl_0_20160101T000000&func=7', { headers: UPSTREAM_HEADERS });
-        const j = JSON.parse(await r.text());
-        const a = (j.iTranvias && j.iTranvias.actualizacion) || {};
-        const lines = {}, stops = {}, pos = {};
-        for (const l of a.lineas || []) {
-          let c = String(l.color || '').trim();
-          if (c && c[0] !== '#') c = '#' + c;
-          lines[l.id] = { n: l.lin_comer, c: c, o: l.nombre_orig, d: l.nombre_dest };
-        }
-        for (const p of a.paradas || []) { stops[p.id] = p.nombre; if (p.posy && p.posx) pos[p.id] = [Number(p.posy), Number(p.posx)]; }
-        const res = json({ lines, stops, pos }, 200, 'public, max-age=86400');
-        ctx.waitUntil(cache.put(key, res.clone()));
-        return res;
-      } catch (e) {
-        return json({ lines: {}, stops: {} }, 200);
-      }
+      try { return json(await getMeta(), 200, 'public, max-age=86400'); } catch (e) { return json({ lines: {}, stops: {} }, 200); }
     }
 
     if (url.pathname === '/api/plan') {
@@ -349,6 +329,7 @@ async function alexa(req, env) {
 
   if (intent === 'LlegarIntent' || intent === 'SalirIntent') return alexaPlan(body.request.intent, intent === 'LlegarIntent' ? 'ida' : 'vuelta');
   if (intent === 'PasaIntent') return alexaPasa(body.request.intent);
+  if (intent === 'ConsultaIntent') return alexaConsulta(body.request.intent);
   const hour = Number(new Intl.DateTimeFormat('es-ES', { timeZone: 'Europe/Madrid', hour: 'numeric', hourCycle: 'h23' }).format(new Date()));
   let trip = hour < 15 ? 'ida' : 'vuelta';
   if (intent === 'IdaIntent') trip = 'ida';
@@ -499,4 +480,121 @@ async function alexaPasa(intent) {
   } catch (e) { return alexaSay('No he podido consultar los horarios de iTranvías. Prueba en un momento.'); }
   if (!parts.length) return alexaSay('No encuentro buses en tus paradas sobre ' + say(fmt(t)) + '.');
   return alexaSay('Sobre ' + say(fmt(t)) + ' pasan ' + parts.join('; ') + '. Es el horario programado.');
+}
+
+// ---------- Catálogo de líneas y paradas (cacheado 1 día) ----------
+async function getMeta() {
+  const cache = caches.default;
+  const key = new Request('https://mibus.cache/meta/v2');
+  const hit = await cache.match(key);
+  if (hit) return hit.json();
+  const r = await fetch(API + '?dato=20160101T000000_gl_0_20160101T000000&func=7', { headers: UPSTREAM_HEADERS });
+  const j = JSON.parse(await r.text());
+  const a = (j.iTranvias && j.iTranvias.actualizacion) || {};
+  const lines = {}, stops = {}, pos = {};
+  for (const l of a.lineas || []) {
+    let c = String(l.color || '').trim();
+    if (c && c[0] !== '#') c = '#' + c;
+    lines[l.id] = { n: l.lin_comer, c: c, o: l.nombre_orig, d: l.nombre_dest };
+  }
+  for (const p of a.paradas || []) { stops[p.id] = p.nombre; if (p.posy && p.posx) pos[p.id] = [Number(p.posy), Number(p.posx)]; }
+  const out = { lines, stops, pos };
+  if (Object.keys(stops).length) await cache.put(key, new Response(JSON.stringify(out), { headers: { 'cache-control': 'public, max-age=86400' } }));
+  return out;
+}
+
+// ---------- Alexa: consulta por línea y/o parada ----------
+const NUM_WORDS = { uno: 1, un: 1, una: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6, siete: 7, ocho: 8, nueve: 9, diez: 10, once: 11, doce: 12, trece: 13, catorce: 14, quince: 15, dieciseis: 16, diecisiete: 17, dieciocho: 18, diecinueve: 19, veinte: 20, veintiuno: 21, veintiun: 21, veintidos: 22, veintitres: 23, veinticuatro: 24 };
+const STOP_ALIASES = { 'corte ingles': 40, 'el corte ingles': 40, 'trabajo': 40, 'casa': 50, 'mi casa': 50 };
+const STOP_WORDS = new Set(['de', 'del', 'la', 'el', 'los', 'las', 'a', 'en', 'por', 'parada', 'rda', 'ronda', 'av', 'avda', 'avenida', 'rua', 'calle', 'c', 'pza', 'praza', 'plaza', 'numero', 'n']);
+function norm(v) { return String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim(); }
+const TENS = { veinte: 20, treinta: 30, cuarenta: 40, cincuenta: 50, sesenta: 60, setenta: 70, ochenta: 80, noventa: 90 };
+const HUNDREDS = { cien: 100, ciento: 100, doscientos: 200, trescientos: 300, cuatrocientos: 400, quinientos: 500, seiscientos: 600, setecientos: 700, ochocientos: 800, novecientos: 900 };
+function wordsToNum(v) {
+  const out = [];
+  let acc = null;
+  const flush = () => { if (acc != null) { out.push(String(acc)); acc = null; } };
+  for (const w of norm(v).split(' ')) {
+    if (HUNDREDS[w] != null) { flush(); acc = HUNDREDS[w]; }
+    else if (TENS[w] != null) { acc = (acc != null && acc % 100 === 0 ? acc : (flush(), 0)) + TENS[w]; }
+    else if (NUM_WORDS[w] != null) { acc = (acc != null && acc % 10 === 0 ? acc : (flush(), 0)) + NUM_WORDS[w]; }
+    else if (w === 'y' && acc != null) { /* "cuarenta y nueve" */ }
+    else { flush(); out.push(w); }
+  }
+  flush();
+  return out.join(' ');
+}
+function lineKey(v) { return wordsToNum(v).replace(/^linea /, '').replace(/ /g, ''); }
+
+function findLine(meta, spoken) {
+  const k = lineKey(spoken);
+  if (!k) return null;
+  for (const id in meta.lines) if (lineKey(meta.lines[id].n) === k) return Number(id);
+  return null;
+}
+
+function findStop(meta, spoken, preferred) {
+  const q = norm(spoken);
+  if (STOP_ALIASES[q] != null) return { id: STOP_ALIASES[q] };
+  const toks = wordsToNum(q).split(' ').filter((t) => t && !STOP_WORDS.has(t));
+  if (!toks.length) return null;
+  const nums = toks.filter((t) => /^\d+$/.test(t));
+  let best = [], bestScore = 0;
+  for (const id in meta.stops) {
+    const nt = wordsToNum(meta.stops[id]).split(' ');
+    if (nums.some((n) => nt.indexOf(n) < 0)) continue;
+    const score = toks.filter((t) => nt.indexOf(t) >= 0 || (t.length > 3 && nt.some((x) => x.startsWith(t)))).length;
+    if (score > bestScore) { bestScore = score; best = [Number(id)]; } else if (score === bestScore && score > 0) best.push(Number(id));
+  }
+  if (!best.length || bestScore < Math.min(2, toks.length)) return null;
+  const pref = best.filter((id) => preferred.indexOf(id) >= 0);
+  if (pref.length) return { id: pref[0] };
+  if (best.length > 1 && !nums.length) return { ambiguous: best.slice(0, 3).map((id) => meta.stops[id]) };
+  return { id: best[0] };
+}
+
+function speakStop(name) { return String(name).replace(/^Rda\./, 'Ronda').replace(/^Av\./, 'Avenida').replace(/^Pza\./, 'Plaza'); }
+
+async function alexaConsulta(intent) {
+  NOW_MIN = madridNow().min;
+  let meta;
+  try { meta = await getMeta(); } catch (e) { return alexaSay('No he podido consultar iTranvías. Prueba en un momento.'); }
+  const lineSpoken = slot(intent, 'linea'), stopSpoken = slot(intent, 'parada'), num = slot(intent, 'numero');
+  const lineId = lineSpoken ? findLine(meta, lineSpoken) : null;
+  if (lineSpoken && !lineId) return alexaSay('No conozco la línea ' + lineSpoken + '.');
+  const trip = NOW_MIN < 15 * 60 ? 'ida' : 'vuelta';
+  const mine = [...new Set(ALEXA_TRIPS[trip].map((s) => s.id).concat(ALEXA_TRIPS[trip === 'ida' ? 'vuelta' : 'ida'].map((s) => s.id)))];
+
+  let stops = [];
+  if (num && meta.stops[num]) stops = [Number(num)];
+  else if (stopSpoken) {
+    const f = findStop(meta, stopSpoken, mine);
+    if (!f) return alexaSay('No encuentro la parada ' + stopSpoken + '. Prueba con el nombre de la calle y el número.', false);
+    if (f.ambiguous) return alexaSay('Hay varias paradas así: ' + f.ambiguous.map(speakStop).join(', ') + '. ¿Cuál?', false);
+    stops = [f.id];
+  } else if (lineId) stops = ALEXA_TRIPS[trip].map((s) => s.id);
+  if (!stops.length) return alexaSay('Dime una línea o una parada. Por ejemplo: cuándo pasa el 14 por Outeiro 126.', false);
+
+  const parts = [];
+  await Promise.all(stops.map(async (sid) => {
+    try {
+      const r = await fetch(API + '?dato=' + sid + '&func=0', { headers: UPSTREAM_HEADERS });
+      const j = JSON.parse(await r.text());
+      const items = [];
+      for (const l of (j.buses && j.buses.lineas) || []) {
+        if (lineId && l.linea !== lineId) continue;
+        const name = (meta.lines[l.linea] && meta.lines[l.linea].n) || String(l.linea);
+        const mins = (l.buses || []).map((b) => Math.round(parseMin(b.tiempo))).sort((a, b) => a - b).slice(0, lineId ? 3 : 2);
+        if (mins.length) items.push({ name, first: mins[0], text: 'el ' + name.replace(/A$/, ' A') + ' ' + mins.map((m, i) => (i === 0 ? when(m) : at(m))).join(' y ') });
+      }
+      items.sort((a, b) => a.first - b.first);
+      if (items.length) parts.push({ sid, text: 'En ' + speakStop(meta.stops[sid] || sid) + ': ' + items.slice(0, 4).map((x) => x.text).join('; ') + '.' });
+    } catch (e) {}
+  }));
+  if (!parts.length) {
+    if (lineId && !stopSpoken && !num) return alexaSay('Ahora mismo el ' + meta.lines[lineId].n + ' no tiene buses próximos por tus paradas. Puedes preguntarme por otra parada.');
+    return alexaSay('Ahora mismo no hay buses próximos' + (lineId ? ' del ' + meta.lines[lineId].n : '') + ' en esa parada.');
+  }
+  parts.sort((a, b) => stops.indexOf(a.sid) - stops.indexOf(b.sid));
+  return alexaSay(parts.map((p) => p.text).join(' '));
 }

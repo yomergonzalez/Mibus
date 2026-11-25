@@ -132,9 +132,397 @@
             "el bus de las {hora}",
             "qué pasa a las {hora}"
           ]
+        },
+        {
+          "name": "ConsultaIntent",
+          "slots": [
+            {
+              "name": "linea",
+              "type": "LINEA"
+            },
+            {
+              "name": "parada",
+              "type": "PARADA"
+            },
+            {
+              "name": "numero",
+              "type": "AMAZON.NUMBER"
+            }
+          ],
+          "samples": [
+            "cuándo pasa el {linea}",
+            "cuándo viene el {linea}",
+            "a qué hora pasa el {linea}",
+            "cuándo pasa la línea {linea}",
+            "cuánto le falta al {linea}",
+            "cuándo pasa el {linea} por {parada}",
+            "cuándo pasa el {linea} en {parada}",
+            "cuándo viene el {linea} a {parada}",
+            "el {linea} en {parada}",
+            "el {linea} por {parada}",
+            "qué buses pasan por {parada}",
+            "cuándo pasa el bus por {parada}",
+            "qué bus viene a {parada}",
+            "buses en {parada}",
+            "la parada de {parada}",
+            "consulta {parada}",
+            "la parada {numero}",
+            "cuándo pasa el bus por la parada {numero}",
+            "cuándo pasa el {linea} por la parada {numero}",
+            "parada número {numero}"
+          ]
         }
       ],
-      "types": []
+      "types": [
+        {
+          "name": "LINEA",
+          "values": [
+            {
+              "name": {
+                "value": "1",
+                "synonyms": [
+                  "uno"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "2",
+                "synonyms": [
+                  "dos"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "3",
+                "synonyms": [
+                  "tres"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "4",
+                "synonyms": [
+                  "cuatro"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "5",
+                "synonyms": [
+                  "cinco"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "6",
+                "synonyms": [
+                  "seis"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "7",
+                "synonyms": [
+                  "siete"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "11",
+                "synonyms": [
+                  "once"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "12",
+                "synonyms": [
+                  "doce"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "14",
+                "synonyms": [
+                  "catorce"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "17",
+                "synonyms": [
+                  "diecisiete"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "20",
+                "synonyms": [
+                  "veinte"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "21",
+                "synonyms": [
+                  "veintiuno"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "22",
+                "synonyms": [
+                  "veintidós"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "23",
+                "synonyms": [
+                  "veintitrés"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "24",
+                "synonyms": [
+                  "veinticuatro"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "1A",
+                "synonyms": [
+                  "uno a",
+                  "1 a"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "2A",
+                "synonyms": [
+                  "dos a",
+                  "2 a"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "3A",
+                "synonyms": [
+                  "tres a",
+                  "3 a"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "6A",
+                "synonyms": [
+                  "seis a",
+                  "6 a"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "12A",
+                "synonyms": [
+                  "doce a",
+                  "12 a"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "23A",
+                "synonyms": [
+                  "veintitrés a",
+                  "23 a"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "UDC",
+                "synonyms": [
+                  "universidad"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "BUH",
+                "synonyms": [
+                  "bus hospital"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PARADA",
+          "values": [
+            {
+              "name": {
+                "value": "Ronda de Nelle 109"
+              }
+            },
+            {
+              "name": {
+                "value": "Nelle"
+              }
+            },
+            {
+              "name": {
+                "value": "Ronda de Outeiro 249"
+              }
+            },
+            {
+              "name": {
+                "value": "Outeiro 249"
+              }
+            },
+            {
+              "name": {
+                "value": "Ronda de Outeiro 126"
+              }
+            },
+            {
+              "name": {
+                "value": "Outeiro 126"
+              }
+            },
+            {
+              "name": {
+                "value": "Avenida de Oza 7"
+              }
+            },
+            {
+              "name": {
+                "value": "Oza"
+              }
+            },
+            {
+              "name": {
+                "value": "Pérez Ardá"
+              }
+            },
+            {
+              "name": {
+                "value": "Ramón y Cajal"
+              }
+            },
+            {
+              "name": {
+                "value": "Corte Inglés"
+              }
+            },
+            {
+              "name": {
+                "value": "Cuatro Caminos"
+              }
+            },
+            {
+              "name": {
+                "value": "Plaza de Pontevedra"
+              }
+            },
+            {
+              "name": {
+                "value": "Juan Flórez"
+              }
+            },
+            {
+              "name": {
+                "value": "Estación de autobuses"
+              }
+            },
+            {
+              "name": {
+                "value": "Estación de tren"
+              }
+            },
+            {
+              "name": {
+                "value": "Marineda"
+              }
+            },
+            {
+              "name": {
+                "value": "Plaza de España"
+              }
+            },
+            {
+              "name": {
+                "value": "Os Rosales"
+              }
+            },
+            {
+              "name": {
+                "value": "Avenida de Fisterra"
+              }
+            },
+            {
+              "name": {
+                "value": "Avenida de Arteixo"
+              }
+            },
+            {
+              "name": {
+                "value": "Os Mallos"
+              }
+            },
+            {
+              "name": {
+                "value": "Matogrande"
+              }
+            },
+            {
+              "name": {
+                "value": "Elviña"
+              }
+            },
+            {
+              "name": {
+                "value": "Hospital"
+              }
+            },
+            {
+              "name": {
+                "value": "Riazor"
+              }
+            },
+            {
+              "name": {
+                "value": "Obelisco"
+              }
+            },
+            {
+              "name": {
+                "value": "Puerta Real"
+              }
+            }
+          ]
+        }
+      ]
     }
   }
 }
