@@ -74,12 +74,34 @@ footer{color:var(--mute);font-size:13px;text-align:center;padding:0 16px 28px}
 <script>
 {
 
-// Consulta directa a iTranvías. Si el navegador lo bloquea (CORS), pon aquí la URL de tu Worker de Cloudflare:
+// iTranvías no permite consultas directas desde el navegador (CORS), así que se usa un intermediario.
+// Si despliegas tu propio Worker de Cloudflare (cloudflare/worker.js), pon aquí su URL y se usará primero:
 const PROXY = "";
 const API = "https://itranvias.com/queryitr_v3.php";
+const ROUTES = [
+  { k: "allorigins", f: (u) => "https://api.allorigins.win/raw?url=" + encodeURIComponent(u) },
+  { k: "codetabs", f: (u) => "https://api.codetabs.com/v1/proxy/?quest=" + encodeURIComponent(u) },
+  { k: "corsproxy", f: (u) => "https://corsproxy.io/?url=" + encodeURIComponent(u) },
+  { k: "direct", f: (u) => u }
+];
+let best = null;
+try { best = localStorage.getItem("mibus-route"); } catch (e) {}
+async function tryFetch(url, ms) {
+  const c = new AbortController(); const t = setTimeout(() => c.abort(), ms);
+  try { const r = await fetch(url, { signal: c.signal }); if (!r.ok) throw new Error(r.status); return JSON.parse(await r.text()); }
+  finally { clearTimeout(t); }
+}
 async function getJSON(direct, viaProxy) {
-  try { const r = await fetch(direct); if (!r.ok) throw new Error(r.status); return await r.json(); }
-  catch (e) { if (!PROXY) throw e; const r = await fetch(PROXY.replace(/\/$/, "") + viaProxy); return await r.json(); }
+  if (PROXY) { try { return await tryFetch(PROXY.replace(/\/$/, "") + viaProxy, 8000); } catch (e) {} }
+  const order = ROUTES.slice().sort((a, b) => (b.k === best) - (a.k === best));
+  for (const r of order) {
+    try {
+      const j = await tryFetch(r.f(direct), 9000);
+      if (best !== r.k) { best = r.k; try { localStorage.setItem("mibus-route", best); } catch (e) {} }
+      return j;
+    } catch (e) {}
+  }
+  throw new Error("sin conexión");
 }
 function getStop(id) {
   return getJSON(API + "?dato=" + id + "&func=0", "/api/stop?id=" + id).then((j) => {
@@ -155,7 +177,7 @@ function render() {
           (left <= 1 ? '<div class="min now">Llegando</div>' : '<div class="min">' + left + '<small>min</small></div>') +
           '<div class="at"><b>' + hhmm(d.at + b.t * 60000) + '</b><span>a ' + esc(km) + '</span></div></div>';
       }).join('') || '<div class="empty">Sin buses próximos ahora mismo.</div>';
-      if (d.err) rows = '<div class="err">No se pudo conectar con iTranvías. Si no se arregla al recargar, hay que activar el intermediario (PROXY).</div>' + rows;
+      if (d.err) rows = '<div class="err">No se pudo conectar con iTranvías ahora mismo. Pulsa Actualizar en unos segundos.</div>' + rows;
     }
     const present = new Set((d && d.lineas || []).map((l) => l.linea));
     (s.lines || []).forEach((x) => present.add(x));
