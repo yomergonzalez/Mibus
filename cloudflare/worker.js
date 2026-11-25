@@ -13,6 +13,7 @@ const UPSTREAM_HEADERS = {
 
 export default {
   async fetch(req, env, ctx) {
+    ENV = env;
     const res = await handle(req, env, ctx);
     if (UPSTREAM_ERR.length && env && env.DB && ctx) {
       const errs = UPSTREAM_ERR.splice(0);
@@ -45,7 +46,7 @@ async function handle(req, env, ctx) {
       for (let i = 0; i < 2; i++) {
         try {
           const d = await pubStop(id);
-          return json({ parada: id, at: d.at, lineas: d.lineas });
+          return json({ parada: id, at: d.at, lineas: d.lineas, ...(d.stale ? { stale: true, edad_s: d.age } : {}) });
         } catch (e) {
           if (i === 0) await new Promise((r) => setTimeout(r, 400));
         }
@@ -360,7 +361,7 @@ async function nextBuses(trip) {
   const all = [];
   await Promise.all(ALEXA_TRIPS[trip].map(async (s) => {
     try {
-      const { j } = await upstreamJSON(API + '?dato=' + s.id + '&func=0', { headers: UPSTREAM_HEADERS, cache: 'no-store' });
+      const j = stopAsUpstream(await pubStop(s.id));
       traceUpstream(s.id, j);
       for (const l of (j.buses && j.buses.lineas) || []) {
         if (s.lines.indexOf(l.linea) < 0) continue;
@@ -667,7 +668,7 @@ async function alexaConsulta(intent, attrs = {}, src = 'alexa') {
   const parts = [];
   await Promise.all(stops.map(async (sid) => {
     try {
-      const { j } = await upstreamJSON(API + '?dato=' + sid + '&func=0', { headers: UPSTREAM_HEADERS, cache: 'no-store' });
+      const j = stopAsUpstream(await pubStop(sid));
       traceUpstream(sid, j);
       const items = [];
       for (const l of (j.buses && j.buses.lineas) || []) {
@@ -926,7 +927,7 @@ async function verifyToken(token, env, origin) {
 // Caché en memoria (caches.default no funciona en *.workers.dev) + rate limit por IP.
 // =====================================================================
 
-var PUB_STOP_TTL = 25e3;            // tiempos en vivo: 25 s por parada
+var PUB_STOP_TTL = 60e3;            // tiempos en vivo: 60 s por parada (iTranvías: máx. 4 peticiones/min por IP)
 var PUB_META_TTL = 6 * 3600e3;      // paradas y líneas: 6 h
 var PUB_DEP_TTL = 6 * 3600e3;       // horarios programados: 6 h
 var PUB_RATE_PER_MIN = 60;          // peticiones por IP y minuto (por isolate)
@@ -964,12 +965,62 @@ function pubMeta() {
   });
 }
 
+// Llegadas de una parada. Orden: memoria del isolate (60 s) → caché compartida en D1 (60 s)
+// → iTranvías. Si iTranvías falla o está en pausa, devuelve el último dato bueno
+// (hasta STALE_MAX) con los minutos ya descontados y stale: true.
+var STALE_MAX = 15 * 60e3;
+var lastGood = new Map();
+
 function pubStop(id) {
   return pubMemo("stop:" + id, PUB_STOP_TTL, async () => {
-    const { r, j } = await upstreamJSON(API + "?dato=" + id + "&func=0", { headers: UPSTREAM_HEADERS, cache: "no-store" });
-    if (!r.ok) throw new Error("iTranvías " + r.status);
-    return { at: Date.now(), lineas: (j.buses && j.buses.lineas) || [] };
+    const shared = await stopCacheGet(id);
+    if (shared && Date.now() - shared.at < PUB_STOP_TTL) return shared;
+    try {
+      const { r, j } = await upstreamJSON(API + "?dato=" + id + "&func=0", { headers: UPSTREAM_HEADERS, cache: "no-store" });
+      if (!r.ok) throw new Error("iTranvías " + r.status);
+      const d = { at: Date.now(), lineas: (j.buses && j.buses.lineas) || [] };
+      lastGood.set(id, d);
+      await stopCachePut(id, d);
+      return d;
+    } catch (e) {
+      const mem = lastGood.get(id);
+      const old = mem && (!shared || mem.at >= shared.at) ? mem : shared;
+      if (old && Date.now() - old.at < STALE_MAX) return staleStop(old);
+      throw e;
+    }
   });
+}
+
+// Pasa un dato viejo a "ahora": resta los minutos transcurridos y quita los buses que ya pasaron.
+function staleStop(d) {
+  const now = Date.now();
+  const gone = Math.floor((now - d.at) / 60000);
+  const lineas = d.lineas.map((l) => ({
+    ...l,
+    buses: (l.buses || [])
+      .map((b) => ({ ...b, tiempo: Math.round(parseMin(b.tiempo)) - gone }))
+      .filter((b) => b.tiempo >= 0)
+  })).filter((l) => l.buses.length);
+  return { at: now, lineas, stale: true, age: Math.round((now - d.at) / 1000) };
+}
+
+// Adaptador para el código que esperaba la respuesta cruda de iTranvías
+function stopAsUpstream(d) {
+  const gone = Math.floor((Date.now() - d.at) / 60000);
+  return { buses: { lineas: d.lineas.map((l) => ({ ...l, buses: (l.buses || []).map((b) => ({ ...b, tiempo: Math.max(0, Math.round(parseMin(b.tiempo)) - gone) })) })) } };
+}
+
+async function stopCacheGet(id) {
+  if (!(await stateReady())) return null;
+  try {
+    const row = await ENV.DB.prepare("SELECT v FROM state WHERE k = ?").bind("stop:" + id).first();
+    return row ? JSON.parse(row.v) : null;
+  } catch (e) { return null; }
+}
+
+async function stopCachePut(id, d) {
+  if (!(await stateReady())) return;
+  try { await ENV.DB.prepare("INSERT OR REPLACE INTO state (k, v) VALUES (?, ?)").bind("stop:" + id, JSON.stringify(d)).run(); } catch (e) {}
 }
 
 function pubDepartures(lineId, ymd) {
@@ -1236,7 +1287,63 @@ var ALEXA_TRACE = null;
 // (tabla upstream_log) el código, las cabeceras útiles y el principio del cuerpo.
 var UPSTREAM_ERR = [];
 
+// Límites de iTranvías por IP (su página de 429): 1/s, 4/min, 199/h, 1999/día.
+// - Cola: como mucho una petición cada UPSTREAM_GAP ms (por isolate).
+// - Pausa: tras un 429 no se llama a iTranvías durante 1, 2, 4, 8… min (máx. 30),
+//   compartida entre isolates vía D1. Insistir solo alarga el bloqueo.
+var ENV = null;
+var UPSTREAM_GAP = 1100;
+var upstreamQueue = Promise.resolve();
+var upstreamLast = 0;
+var breaker = { until: 0, strikes: 0, checked: 0 };
+
+async function breakerLoad() {
+  if (Date.now() - breaker.checked < 10e3 || !(await stateReady())) return;
+  breaker.checked = Date.now();
+  try {
+    const row = await ENV.DB.prepare("SELECT v FROM state WHERE k = 'breaker'").first();
+    if (row) {
+      const b = JSON.parse(row.v);
+      if (b.until > breaker.until) { breaker.until = b.until; breaker.strikes = b.strikes; }
+      if (b.until === 0 && b.strikes === 0) breaker.strikes = 0;
+    }
+  } catch (e) {}
+}
+
+async function breakerSave() {
+  if (!(await stateReady())) return;
+  try {
+    await ENV.DB.prepare("INSERT OR REPLACE INTO state (k, v) VALUES ('breaker', ?)")
+      .bind(JSON.stringify({ until: breaker.until, strikes: breaker.strikes })).run();
+  } catch (e) {}
+}
+
+function upstreamSlot() {
+  const p = upstreamQueue.then(async () => {
+    const wait = upstreamLast + UPSTREAM_GAP - Date.now();
+    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+    upstreamLast = Date.now();
+  });
+  upstreamQueue = p.catch(() => {});
+  return p;
+}
+
+var stateOk = null;
+async function stateReady() {
+  if (!ENV || !ENV.DB) return false;
+  if (stateOk === null) {
+    stateOk = ENV.DB.prepare("CREATE TABLE IF NOT EXISTS state (k TEXT PRIMARY KEY, v TEXT)").run().then(() => true, () => false);
+  }
+  return stateOk;
+}
+
 async function upstreamJSON(url, opts) {
+  await breakerLoad();
+  if (Date.now() < breaker.until) {
+    throw new Error("iTranvías en pausa " + Math.ceil((breaker.until - Date.now()) / 1000) + " s (429)");
+  }
+  await upstreamSlot();
+  if (Date.now() < breaker.until) throw new Error("iTranvías en pausa (429)");
   const t0 = Date.now();
   let r, text;
   try {
@@ -1246,6 +1353,13 @@ async function upstreamJSON(url, opts) {
     noteUpstream(url, null, String((e && e.message) || e), t0);
     throw e;
   }
+  if (r.status === 429) {
+    noteUpstream(url, r, text, t0);
+    breaker.strikes = Math.min(breaker.strikes + 1, 6);
+    breaker.until = Date.now() + Math.min(60e3 * 2 ** (breaker.strikes - 1), 30 * 60e3);
+    await breakerSave();
+    throw new Error("iTranvías 429");
+  }
   let j;
   try {
     j = JSON.parse(text);
@@ -1254,6 +1368,7 @@ async function upstreamJSON(url, opts) {
     throw new Error('iTranvías: respuesta no JSON (' + r.status + ')');
   }
   if (!r.ok || (/func=0/.test(url) && !(j && j.buses))) noteUpstream(url, r, text, t0);
+  if (breaker.strikes) { breaker.strikes = 0; breaker.until = 0; await breakerSave(); }
   return { r, j };
 }
 
