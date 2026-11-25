@@ -49,6 +49,14 @@ export default {
       }
     }
 
+    if (url.pathname === '/api/plan') {
+      const trip = url.searchParams.get('trip') === 'vuelta' ? 'vuelta' : 'ida';
+      const time = parseHHMM(url.searchParams.get('time') || '');
+      const date = (url.searchParams.get('date') || madridNow().date).replace(/-/g, '');
+      if (time == null || !/^\d{8}$/.test(date)) return json({ error: 'parámetros inválidos' }, 400);
+      try { return json(await plan(trip, time, date)); } catch (e) { return json({ error: 'iTranvías no responde' }, 502); }
+    }
+
     if (url.pathname === '/alexa' && req.method === 'POST') {
       return alexa(req, env);
     }
@@ -337,6 +345,7 @@ async function alexa(req, env) {
   if (intent === 'AMAZON.StopIntent' || intent === 'AMAZON.CancelIntent') return alexaSay('Vale.');
   if (intent === 'AMAZON.HelpIntent') return alexaSay('Puedes decir: cuándo pasa el bus, el bus al trabajo, o el bus a casa.', false);
 
+  if (intent === 'LlegarIntent' || intent === 'SalirIntent') return alexaPlan(body.request.intent, intent === 'LlegarIntent' ? 'ida' : 'vuelta');
   const hour = Number(new Intl.DateTimeFormat('es-ES', { timeZone: 'Europe/Madrid', hour: 'numeric', hourCycle: 'h23' }).format(new Date()));
   let trip = hour < 15 ? 'ida' : 'vuelta';
   if (intent === 'IdaIntent') trip = 'ida';
@@ -357,4 +366,106 @@ async function alexa(req, env) {
   if (b) text += ' Después, el ' + b.line + ' en ' + b.stop + ', ' + when(b.min) + '.';
   if (c) text += ' Y el ' + c.line + ' en ' + c.stop + ', ' + when(c.min) + '.';
   return alexaSay(text);
+}
+
+
+// ---------- Planificador con horario programado ----------
+// off = minutos desde la salida en cabecera hasta la parada (calibrado con Google Maps; * = estimado)
+// walkTo = andando hasta la parada; ride = minutos en bus; walkFrom = andando desde la bajada al destino
+const PLAN = {
+  ida: [
+    { stop: 'Ronda de Nelle 109', line: 1200, dir: 'ida', off: 14, walkTo: 4, ride: 8, walkFrom: 6, main: true },
+    { stop: 'Ronda de Outeiro 249', line: 1400, dir: 'ida', off: 17, walkTo: 5, ride: 10, walkFrom: 5 }
+  ],
+  vuelta: [
+    { stop: 'Avenida de Oza 7', line: 1200, dir: 'vuelta', off: 15, walkTo: 7, ride: 7, walkFrom: 5 },
+    { stop: 'Ronda de Outeiro, Pérez Ardá', line: 1400, dir: 'vuelta', off: 23, walkTo: 5, ride: 10, walkFrom: 5 },
+    { stop: 'Avenida de Oza 7', line: 1400, dir: 'vuelta', off: 18, walkTo: 7, ride: 15, walkFrom: 5 },
+    { stop: 'Ronda de Outeiro 126', line: 1400, dir: 'vuelta', off: 27, walkTo: 8, ride: 7, walkFrom: 5 },
+    { stop: 'Ronda de Outeiro 126', line: 1500, dir: 'vuelta', off: 38, walkTo: 8, ride: 5, walkFrom: 5 },
+    { stop: 'Ronda de Outeiro 126', line: 2000, dir: 'vuelta', off: 30, walkTo: 8, ride: 4, walkFrom: 5 }
+  ]
+};
+
+function parseHHMM(v) {
+  const m = String(v).match(/^(\d{1,2})(?::?(\d{2}))?$/);
+  if (!m) return null;
+  const h = Number(m[1]), mi = Number(m[2] || 0);
+  return h < 24 && mi < 60 ? h * 60 + mi : null;
+}
+function fmt(m) { m = ((m % 1440) + 1440) % 1440; return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); }
+function madridNow() {
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Madrid', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+    .formatToParts(new Date()).map((x) => [x.type, x.value]));
+  return { date: p.year + '-' + p.month + '-' + p.day, min: Number(p.hour) * 60 + Number(p.minute) };
+}
+
+async function departures(line, date) {
+  const cache = caches.default;
+  const key = new Request('https://mibus.cache/servicios/' + line + '/' + date);
+  const hit = await cache.match(key);
+  if (hit) return hit.json();
+  const r = await fetch(API + '?func=8&dato=' + line + '&fecha=' + date, { headers: UPSTREAM_HEADERS });
+  const j = JSON.parse(await r.text());
+  const sv = (j.servicios && j.servicios[0]) || {};
+  const toMin = (a) => (a || []).map((n) => Math.floor(Number(n) / 100) * 60 + (Number(n) % 100));
+  const out = { tipo: sv.tipo || '', ida: toMin(sv.ida), vuelta: toMin(sv.vuelta) };
+  await cache.put(key, new Response(JSON.stringify(out), { headers: { 'cache-control': 'public, max-age=43200' } }));
+  return out;
+}
+
+// ida: time = hora a la que quieres llegar. vuelta: time = hora a la que sales del trabajo.
+async function plan(trip, time, date) {
+  const entries = PLAN[trip];
+  const lines = [...new Set(entries.map((e) => e.line))];
+  const deps = {};
+  await Promise.all(lines.map(async (l) => { deps[l] = await departures(l, date); }));
+  const opts = [];
+  for (const e of entries) {
+    for (const d of deps[e.line][e.dir] || []) {
+      const bus = d + e.off, leave = bus - e.walkTo, arrive = bus + e.ride + e.walkFrom;
+      if (trip === 'ida' ? arrive <= time : leave >= time) opts.push({ line: LINE_NAMES[e.line] || String(e.line / 100), lineId: e.line, stop: e.stop, main: !!e.main, leave, bus, arrive });
+    }
+  }
+  if (trip === 'ida') opts.sort((a, b) => b.arrive - a.arrive || b.leave - a.leave);
+  else opts.sort((a, b) => a.arrive - b.arrive || a.leave - b.leave);
+  const tipo = (deps[lines[0]] && deps[lines[0]].tipo) || '';
+  return {
+    trip, date, tipo, time: fmt(time),
+    options: opts.slice(0, 6).map((o) => ({ line: o.line, lineId: o.lineId, stop: o.stop, main: o.main, leave: fmt(o.leave), bus: fmt(o.bus), arrive: fmt(o.arrive) }))
+  };
+}
+
+function slot(intent, name) { return intent && intent.slots && intent.slots[name] && intent.slots[name].value; }
+function say(hhmm) {
+  const [h, m] = hhmm.split(':').map(Number);
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  const part = h < 6 ? ' de la madrugada' : h < 13 ? '' : h < 21 ? ' de la tarde' : ' de la noche';
+  const base = (h12 === 1 ? 'la 1' : 'las ' + h12) + (m === 0 ? '' : m === 30 ? ' y media' : m === 15 ? ' y cuarto' : ' y ' + m);
+  return base + part;
+}
+
+async function alexaPlan(intent, trip) {
+  const hora = slot(intent, 'hora');
+  const now = madridNow();
+  const t = parseHHMM(String(hora || '').replace(/[^0-9:]/g, ''));
+  if (t == null) return alexaSay(trip === 'ida' ? '¿A qué hora quieres llegar? Por ejemplo: para llegar a las diez.' : '¿A qué hora sales? Por ejemplo: si salgo a las seis.', false);
+  let date = slot(intent, 'dia') || now.date;
+  if (!slot(intent, 'dia') && t < now.min - 30) {
+    const d = new Date(now.date + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + 1); date = d.toISOString().slice(0, 10);
+  }
+  let p;
+  try { p = await plan(trip, t, date.replace(/-/g, '')); } catch (e) { return alexaSay('No he podido consultar los horarios de iTranvías. Prueba en un momento.'); }
+  if (!p.options.length) return alexaSay('No encuentro buses para esa hora.');
+  const best = p.options.find((o) => o.main) || p.options[0];
+  if (trip === 'ida') {
+    const prev = p.options.find((o) => o.lineId === best.lineId && o.stop === best.stop && o.bus < best.bus);
+    let text = 'Para llegar a ' + say(fmt(t)) + ', coge el ' + best.line + ' en ' + best.stop + ' a ' + say(best.bus) + '. Sal de casa a ' + say(best.leave) + ' y llegas sobre ' + say(best.arrive) + '.';
+    if (prev) text += ' Si quieres ir con margen, el anterior pasa a ' + say(prev.bus) + '.';
+    return alexaSay(text + ' Es el horario programado; puede variar con el tráfico.');
+  }
+  const a = p.options[0], b = p.options[1];
+  let text = 'Si sales a ' + say(fmt(t)) + ', lo mejor es el ' + a.line + ' en ' + a.stop + ' a ' + say(a.bus) + '; llegas a casa sobre ' + say(a.arrive) + '.';
+  if (b) text += ' Si no, el ' + b.line + ' en ' + b.stop + ' a ' + say(b.bus) + '.';
+  return alexaSay(text + ' Es el horario programado.');
 }

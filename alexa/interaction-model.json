@@ -3,25 +3,103 @@
     "languageModel": {
       "invocationName": "mi bus",
       "intents": [
-        { "name": "AMAZON.CancelIntent", "samples": [] },
-        { "name": "AMAZON.HelpIntent", "samples": [] },
-        { "name": "AMAZON.StopIntent", "samples": [] },
-        { "name": "AMAZON.NavigateHomeIntent", "samples": [] },
-        { "name": "AMAZON.FallbackIntent", "samples": [] },
+        {
+          "name": "AMAZON.CancelIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.HelpIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.StopIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.NavigateHomeIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.FallbackIntent",
+          "samples": []
+        },
         {
           "name": "ProximoIntent",
           "slots": [],
-          "samples": ["cuándo pasa el bus", "cuándo pasa el próximo bus", "cuándo viene el bus", "el próximo bus", "a qué hora pasa el bus", "cuánto falta para el bus"]
+          "samples": [
+            "cuándo pasa el bus",
+            "cuándo pasa el próximo bus",
+            "cuándo viene el bus",
+            "el próximo bus",
+            "a qué hora pasa el bus",
+            "cuánto falta para el bus"
+          ]
         },
         {
           "name": "IdaIntent",
           "slots": [],
-          "samples": ["el bus al trabajo", "cuándo pasa el bus al trabajo", "la ida", "buses para ir al trabajo", "el bus para el corte inglés"]
+          "samples": [
+            "el bus al trabajo",
+            "cuándo pasa el bus al trabajo",
+            "la ida",
+            "buses para ir al trabajo",
+            "el bus para el corte inglés"
+          ]
         },
         {
           "name": "VueltaIntent",
           "slots": [],
-          "samples": ["el bus a casa", "cuándo pasa el bus a casa", "la vuelta", "buses para volver a casa", "el bus para volver"]
+          "samples": [
+            "el bus a casa",
+            "cuándo pasa el bus a casa",
+            "la vuelta",
+            "buses para volver a casa",
+            "el bus para volver"
+          ]
+        },
+        {
+          "name": "LlegarIntent",
+          "slots": [
+            {
+              "name": "hora",
+              "type": "AMAZON.TIME"
+            },
+            {
+              "name": "dia",
+              "type": "AMAZON.DATE"
+            }
+          ],
+          "samples": [
+            "para llegar a las {hora}",
+            "para llegar a las {hora} {dia}",
+            "si entro a las {hora}",
+            "si entro a las {hora} {dia}",
+            "qué bus cojo para llegar a las {hora}",
+            "qué bus cojo para entrar a las {hora}",
+            "{dia} entro a las {hora}",
+            "entro a las {hora}"
+          ]
+        },
+        {
+          "name": "SalirIntent",
+          "slots": [
+            {
+              "name": "hora",
+              "type": "AMAZON.TIME"
+            },
+            {
+              "name": "dia",
+              "type": "AMAZON.DATE"
+            }
+          ],
+          "samples": [
+            "si salgo a las {hora}",
+            "si salgo del trabajo a las {hora}",
+            "salgo a las {hora}",
+            "salgo a las {hora} {dia}",
+            "qué bus cojo si salgo a las {hora}",
+            "{dia} salgo a las {hora}"
+          ]
         }
       ],
       "types": []

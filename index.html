@@ -33,6 +33,12 @@ main{max-width:640px;margin:0 auto;padding:10px 10px 14px;display:grid;gap:10px}
 .min small{font-size:12px;font-weight:700;margin-left:2px}
 .min.now{color:var(--red)}
 .mid{min-width:0}
+.pf{display:grid;grid-template-columns:auto 108px minmax(0,1fr) auto;gap:8px;align-items:center;margin:8px 0}
+.pf label{font-size:14px;font-weight:700}
+.pf input,.pf select{min-height:40px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:16px Figtree,system-ui,sans-serif;padding:0 8px}
+.pf button{min-height:40px;border:0;border-radius:10px;background:var(--red);color:#fff;font:700 14px Figtree,system-ui,sans-serif;padding:0 12px}
+@media(max-width:380px){.pf{grid-template-columns:1fr 1fr}.pf label{grid-column:1/-1}}
+.pr .min{font-size:18px}
 .fav{color:#e0a100;font-size:13px;margin-left:4px}
 .other .chip{opacity:.8}.other .min{font-size:18px}
 .sec{font-size:12px;font-weight:700;color:var(--mute);padding:10px 0 4px;border-top:1px solid var(--line)}
@@ -78,6 +84,17 @@ footer{color:var(--mute);font-size:13px;text-align:center;padding:0 16px 28px}
 </header>
 <main id="list"></main>
 <div class="tools">
+  <section class="card" id="plan">
+    <h2>¿A qué hora salgo?</h2>
+    <div class="pf">
+      <label for="pt" id="pl">Llegar a las</label>
+      <input id="pt" type="time" value="10:00">
+      <select id="pd" aria-label="Día"><option value="0">Hoy</option><option value="1">Mañana</option><option value="2">Pasado</option></select>
+      <button id="pb">Calcular</button>
+    </div>
+    <div id="pr"></div>
+    <p class="sub">Horario programado de iTranvías; puede variar con el tráfico.</p>
+  </section>
   <div class="add">
     <input id="q" type="search" placeholder="Añadir parada: busca por calle (p. ej. Nelle)" autocomplete="off">
     <div class="res" id="res"></div>
@@ -169,6 +186,7 @@ function lineInfo(id) {
 }
 
 function render() {
+  if (render.tab !== tab) { render.tab = tab; planLabel(); }
   $('t-ida').setAttribute('aria-pressed', tab === 'ida');
   $('t-vuelta').setAttribute('aria-pressed', tab === 'vuelta');
   const stops = cfg[tab];
@@ -348,6 +366,27 @@ $('res').onclick = (e) => {
   cfg[tab].push({ id: Number(b.dataset.add), lines: null }); save();
   $('q').value = ''; $('res').innerHTML = ''; render(); refresh();
 };
+function planLabel() { $('pl').textContent = tab === 'ida' ? 'Llegar a las' : 'Salgo a las'; try { const v = localStorage.getItem('mibus-plan-' + tab); $('pt').value = v || (tab === 'ida' ? '10:00' : '22:00'); } catch (e) {} $('pr').innerHTML = ''; }
+async function runPlan() {
+  if (!PROXY) { $('pr').innerHTML = '<div class="err">Hace falta el Worker para el horario.</div>'; return; }
+  const v = $('pt').value; if (!v) return;
+  try { localStorage.setItem('mibus-plan-' + tab, v); } catch (e) {}
+  const d = new Date(); d.setDate(d.getDate() + Number($('pd').value));
+  const date = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  $('pr').innerHTML = '<div class="empty">Calculando…</div>';
+  try {
+    const p = await tryFetch(PROXY.replace(/\/$/, '') + '/api/plan?trip=' + tab + '&time=' + encodeURIComponent(v) + '&date=' + date, 8000);
+    const opts = (p.options || []).slice(0, 4);
+    if (!opts.length) { $('pr').innerHTML = '<div class="empty">No hay buses para esa hora.</div>'; return; }
+    $('pr').innerHTML = (p.tipo ? '<div class="sub">' + esc(p.tipo) + '</div>' : '') + opts.map((o) => {
+      const li = lineInfo(o.lineId);
+      return '<div class="row pr"><div class="chip" style="background:' + li.c + '">' + esc(li.n) + '</div><div class="mid"><div class="min">Sal ' + esc(o.leave) + (o.main ? '<span class="fav">★</span>' : '') + '</div>' +
+        '<div class="stp">Bus ' + esc(o.bus) + ' · ' + esc(o.stop) + '</div></div><div class="at"><b>' + esc(o.arrive) + '</b><span>' + (tab === 'ida' ? 'llegas' : 'en casa') + '</span></div></div>';
+    }).join('');
+  } catch (e) { $('pr').innerHTML = '<div class="err">No se pudo consultar el horario. Prueba otra vez.</div>'; }
+}
+$('pb').onclick = runPlan;
+
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) { hiddenAt = Date.now(); return; }
   if (hiddenAt && Date.now() - hiddenAt > 5 * 60000) { manual = false; manualFilt = false; }
