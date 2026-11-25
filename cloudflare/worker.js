@@ -49,6 +49,10 @@ export default {
       }
     }
 
+    if (url.pathname === '/alexa' && req.method === 'POST') {
+      return alexa(req, env);
+    }
+
     if (url.pathname === '/manifest.webmanifest') {
       return new Response(JSON.stringify({
         name: 'Mi bus Coruña', short_name: 'Mi bus', start_url: '/', display: 'standalone',
@@ -274,3 +278,75 @@ fetch('/api/meta').then((r) => r.json()).then((m) => { meta = m || meta; render(
 }
 </script>
 </body></html>`;
+
+
+// ---------- Alexa ----------
+// Paradas y líneas favoritas para Alexa (las mismas que la app por defecto).
+const ALEXA_TRIPS = {
+  // walk = minutos andando hasta la parada (desde casa en la ida, desde El Corte Inglés en la vuelta)
+  ida: [{ id: 50, name: 'Ronda de Nelle 109', lines: [1200], walk: 4 }, { id: 94, name: 'Ronda de Outeiro 249', lines: [1400], walk: 5 }],
+  vuelta: [
+    { id: 40, name: 'Avenida de Oza 7', lines: [1200, 1400], walk: 7 },
+    { id: 269, name: 'Ronda de Outeiro, Pérez Ardá', lines: [1400], walk: 5 },
+    { id: 120, name: 'Ronda de Outeiro 126', lines: [1400, 1500, 2000], walk: 6 }
+  ]
+};
+const LINE_NAMES = { 1200: '12', 1400: '14', 1500: '12 A', 2000: '20', 2200: '22' };
+
+function alexaSay(text, end = true) {
+  return new Response(JSON.stringify({ version: '1.0', response: { outputSpeech: { type: 'PlainText', text }, shouldEndSession: end } }),
+    { headers: { 'content-type': 'application/json; charset=utf-8' } });
+}
+
+function parseMin(v) {
+  if (String(v).indexOf('<') >= 0) return 0;
+  const n = parseFloat(String(v == null ? '' : v).replace(/[^0-9.]/g, ''));
+  return isFinite(n) ? n : 0;
+}
+
+async function nextBuses(trip) {
+  const all = [];
+  await Promise.all(ALEXA_TRIPS[trip].map(async (s) => {
+    try {
+      const r = await fetch(API + '?dato=' + s.id + '&func=0', { headers: UPSTREAM_HEADERS });
+      const j = JSON.parse(await r.text());
+      for (const l of (j.buses && j.buses.lineas) || []) {
+        if (s.lines.indexOf(l.linea) < 0) continue;
+        for (const b of l.buses || []) {
+          const min = Math.round(parseMin(b.tiempo));
+          if (min >= s.walk) all.push({ line: LINE_NAMES[l.linea] || String(Math.floor(l.linea / 100)), min, stop: s.name, leave: min - s.walk });
+        }
+      }
+    } catch (e) {}
+  }));
+  return all.sort((a, b) => a.leave - b.leave || a.min - b.min);
+}
+
+function when(m) { return m <= 1 ? 'está llegando' : 'en ' + m + ' minutos'; }
+function leave(m) { return m <= 1 ? 'Sal ya.' : 'Sal en ' + m + (m === 1 ? ' minuto.' : ' minutos.'); }
+
+async function alexa(req, env) {
+  let body = {};
+  try { body = await req.json(); } catch (e) { return new Response('bad request', { status: 400 }); }
+  const appId = body.session && body.session.application && body.session.application.applicationId;
+  if (env && env.ALEXA_SKILL_ID && appId !== env.ALEXA_SKILL_ID) return new Response('forbidden', { status: 403 });
+
+  const type = body.request && body.request.type;
+  const intent = body.request && body.request.intent && body.request.intent.name;
+  if (type === 'SessionEndedRequest') return alexaSay('', true);
+  if (intent === 'AMAZON.StopIntent' || intent === 'AMAZON.CancelIntent') return alexaSay('Vale.');
+  if (intent === 'AMAZON.HelpIntent') return alexaSay('Puedes decir: cuándo pasa el bus, el bus al trabajo, o el bus a casa.', false);
+
+  const hour = Number(new Intl.DateTimeFormat('es-ES', { timeZone: 'Europe/Madrid', hour: 'numeric', hourCycle: 'h23' }).format(new Date()));
+  let trip = hour < 15 ? 'ida' : 'vuelta';
+  if (intent === 'IdaIntent') trip = 'ida';
+  if (intent === 'VueltaIntent') trip = 'vuelta';
+
+  const buses = await nextBuses(trip);
+  if (!buses.length) return alexaSay('Ahora mismo no tengo buses a los que te dé tiempo a llegar, o iTranvías no responde. Prueba en un momento.');
+  const [a, b, c] = buses;
+  let text = 'El próximo que te da tiempo es el ' + a.line + ' en ' + a.stop + ', ' + when(a.min) + '. ' + leave(a.leave);
+  if (b) text += ' Después, el ' + b.line + ' en ' + b.stop + ', ' + when(b.min) + '.';
+  if (c) text += ' Y el ' + c.line + ' en ' + c.stop + ', ' + when(c.min) + '.';
+  return alexaSay(text);
+}
