@@ -145,7 +145,7 @@ const FALL_LINES = { 1200: { n: '12', c: '#019F02' }, 1400: { n: '14', c: '#025B
 const FALL_POS = { 50: [43.362445, -8.416768], 94: [43.361055, -8.421567], 217: [43.361065, -8.416072], 40: [43.356505, -8.403273], 269: [43.35168, -8.404437], 120: [43.354375, -8.410077] };
 let meta = { lines: {}, stops: {}, pos: {} };
 try { const c = JSON.parse(localStorage.getItem("mibus-meta2")); if (c && c.m && c.m.lines) meta = c.m; } catch (e) {}
-let manual = false, byLoc = false, hiddenAt = 0, filt = null;
+let manual = false, byLoc = false, hiddenAt = 0, filt = null, manualFilt = false, nearId = null;
 let cfg = load();
 let tab = new Date().getHours() < 15 ? 'ida' : 'vuelta';
 const data = {};
@@ -275,8 +275,15 @@ function autoTab() {
       if (!a || !b) return;
       const t = km(me, a) <= km(me, b) ? 'ida' : 'vuelta';
       byLoc = true;
-      if (t !== tab) { tab = t; filt = null; render(); refresh(); } else tick();
-    }, () => {}, { maximumAge: 300000, timeout: 10000, enableHighAccuracy: false });
+      let near = null, nd = Infinity;
+      for (const s of cfg[t]) { const q = posOf(s.id); if (q) { const d = km(me, q); if (d < nd) { nd = d; near = s.id; } } }
+      nearId = nd <= 0.2 ? near : null;
+      const changed = t !== tab;
+      if (changed) { tab = t; filt = null; manualFilt = false; }
+      if (!manualFilt) filt = nearId;
+      render();
+      if (changed) refresh(); else tick();
+    }, () => {}, { maximumAge: 60000, timeout: 10000, enableHighAccuracy: true });
   } catch (e) {}
 }
 
@@ -307,18 +314,18 @@ function tick() {
   $('clock').textContent = hhmm(Date.now());
   if (lastAt) {
     const s = Math.round((Date.now() - lastAt) / 1000);
-    $('upd').textContent = 'Actualizado ' + (s < 5 ? 'ahora' : 'hace ' + s + ' s') + (byLoc && !manual ? ' · según tu ubicación' : '');
+    $('upd').textContent = 'Actualizado ' + (s < 5 ? 'ahora' : 'hace ' + s + ' s') + (nearId && !manual ? ' · estás en ' + shortName(nearId) : (byLoc && !manual ? ' · según tu ubicación' : ''));
   }
 }
 
-$('t-ida').onclick = () => { manual = true; filt = null; tab = 'ida'; render(); refresh(); };
-$('t-vuelta').onclick = () => { manual = true; filt = null; tab = 'vuelta'; render(); refresh(); };
+$('t-ida').onclick = () => { manual = true; filt = null; nearId = null; tab = 'ida'; render(); refresh(); };
+$('t-vuelta').onclick = () => { manual = true; filt = null; nearId = null; tab = 'vuelta'; render(); refresh(); };
 $('refresh').onclick = refresh;
 $('editbtn').onclick = () => { const on = document.body.classList.toggle('editing'); $('editbtn').textContent = on ? 'Listo' : 'Editar paradas'; render(); };
 $('reset').onclick = () => { cfg = JSON.parse(JSON.stringify(DEF)); save(); render(); refresh(); };
 $('list').onclick = (e) => {
   const b = e.target.closest('button'); if (!b) return;
-  if (b.dataset.f != null) { filt = b.dataset.f ? Number(b.dataset.f) : null; render(); return; }
+  if (b.dataset.f != null) { filt = b.dataset.f ? Number(b.dataset.f) : null; manualFilt = true; render(); return; }
   if (b.dataset.rm != null) { cfg[tab].splice(Number(b.dataset.rm), 1); save(); render(); return; }
   if (b.dataset.l) {
     const s = cfg[tab][Number(b.dataset.i)], lid = Number(b.dataset.l);
@@ -343,7 +350,8 @@ $('res').onclick = (e) => {
 };
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) { hiddenAt = Date.now(); return; }
-  if (hiddenAt && Date.now() - hiddenAt > 5 * 60000) { manual = false; autoTab(); }
+  if (hiddenAt && Date.now() - hiddenAt > 5 * 60000) { manual = false; manualFilt = false; }
+  autoTab();
   refresh();
 });
 
@@ -351,6 +359,7 @@ render();
 autoTab();
 refresh().then(() => getMeta().then((m) => { meta = m || meta; render(); }).catch(() => {}));
 setInterval(refresh, 30000);
+setInterval(autoTab, 90000);
 setInterval(() => { tick(); }, 1000);
 setInterval(render, 15000);
 }
