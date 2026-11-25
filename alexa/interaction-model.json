@@ -77,7 +77,11 @@
             "qué bus cojo para llegar a las {hora}",
             "qué bus cojo para entrar a las {hora}",
             "{dia} entro a las {hora}",
-            "entro a las {hora}"
+            "entro a las {hora}",
+            "para llegar {hora}",
+            "si entro {hora}",
+            "si entro {hora} {dia}",
+            "entro {hora}"
           ]
         },
         {
@@ -98,7 +102,10 @@
             "salgo a las {hora}",
             "salgo a las {hora} {dia}",
             "qué bus cojo si salgo a las {hora}",
-            "{dia} salgo a las {hora}"
+            "{dia} salgo a las {hora}",
+            "si salgo {hora}",
+            "salgo {hora}",
+            "si salgo {hora} {dia}"
           ]
         }
       ],
