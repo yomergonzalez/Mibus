@@ -138,9 +138,10 @@ const DEF = {
   vuelta: [{ id: 40, lines: [1200, 1400] }, { id: 269, lines: [1400] }, { id: 120, lines: [1400, 1500, 2000] }]
 };
 const FALL_STOPS = { 50: 'Rda. de Nelle, 109', 94: 'Rda. de Outeiro, 249', 217: 'Av. de Fisterra, 192', 40: 'Av. de Oza, 7', 269: 'Rda. de Outeiro, Pérez Ardá', 120: 'Rda. de Outeiro, 126' };
-const FALL_LINES = { 1200: { n: '12', c: '#019f02' }, 1400: { n: '14' }, 1500: { n: '12A', c: '#4db94c' }, 2000: { n: '20' }, 2200: { n: '22' } };
+const FALL_LINES = { 1200: { n: '12', c: '#019F02' }, 1400: { n: '14', c: '#025BBF' }, 1500: { n: '12A', c: '#4DB94C' }, 2000: { n: '20', c: '#982135' }, 2200: { n: '22', c: '#934165' } };
 const FALL_POS = { 50: [43.362445, -8.416768], 94: [43.361055, -8.421567], 217: [43.361065, -8.416072], 40: [43.356505, -8.403273], 269: [43.35168, -8.404437], 120: [43.354375, -8.410077] };
 let meta = { lines: {}, stops: {}, pos: {} };
+try { const c = JSON.parse(localStorage.getItem("mibus-meta2")); if (c && c.m && c.m.lines) meta = c.m; } catch (e) {}
 let manual = false, byLoc = false, hiddenAt = 0, filt = null;
 let cfg = load();
 let tab = new Date().getHours() < 15 ? 'ida' : 'vuelta';
@@ -158,10 +159,10 @@ function load() {
 function save() { try { localStorage.setItem('mibus-cfg-v3', JSON.stringify(cfg)); } catch (e) {} }
 function stopName(id) { return meta.stops[id] || FALL_STOPS[id] || ('Parada ' + id); }
 function lineInfo(id) {
-  const m = meta.lines[id] || FALL_LINES[id] || {};
-  const n = m.n || (Math.floor(id / 100) + (id % 100 ? '·' + (id % 100) : ''));
-  const c = m.c && /^#[0-9a-f]{3,8}$/i.test(m.c) ? m.c : '#c8102e';
-  return { n: n, c: c };
+  const m = meta.lines[id] || {}, f = FALL_LINES[id] || {};
+  const ok = (c) => c && /^#[0-9a-f]{3,8}$/i.test(c);
+  const n = m.n || f.n || (Math.floor(id / 100) + (id % 100 ? '·' + (id % 100) : ''));
+  return { n: n, c: ok(m.c) ? m.c : (ok(f.c) ? f.c : '#5b5b66') };
 }
 
 function render() {
