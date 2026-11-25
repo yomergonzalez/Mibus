@@ -149,7 +149,7 @@ footer{color:var(--mute);font-size:13px;text-align:center;padding:0 16px 28px}
 <script>
 {
 const DEF = {
-  ida: [{ id: 50, lines: [1200] }, { id: 94, lines: [1400] }],
+  ida: [{ id: 50, lines: [1200] }, { id: 94, lines: [1400] }, { id: 217, lines: [2200] }],
   vuelta: [{ id: 40, lines: [1200, 1400] }, { id: 269, lines: [1400] }, { id: 120, lines: [1400, 1500, 2000] }]
 };
 const FALL_STOPS = { 50: 'Rda. de Nelle, 109', 94: 'Rda. de Outeiro, 249', 40: 'Av. de Oza, 7', 269: 'Rda. de Outeiro, Pérez Ardá', 120: 'Rda. de Outeiro, 126' };
