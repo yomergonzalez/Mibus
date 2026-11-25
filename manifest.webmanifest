@@ -1,0 +1,15 @@
+{
+  "name": "Mi bus Coruña",
+  "short_name": "Mi bus",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#c8102e",
+  "theme_color": "#c8102e",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
