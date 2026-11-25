@@ -1,6 +1,7 @@
 // Mi bus · A Coruña — Cloudflare Worker (proxy de iTranvías + app + skill de Alexa + servidor MCP)
 // Sirve la app, hace de proxy a iTranvías (tiempo real de la Compañía de Tranvías),
-// responde a la skill clásica de Alexa (/alexa) y expone un servidor MCP (/mcp) para Alexa+ y otros clientes.
+// responde a la skill clásica de Alexa (/alexa) y expone un servidor MCP (/mcp) para Alexa+ y otros clientes,
+// más un MCP público y genérico (/mcp/public) sin datos personales.
 // Despliegue: push a main → GitHub Actions (wrangler).
 
 const API = 'https://itranvias.com/queryitr_v3.php';
@@ -50,6 +51,7 @@ export default {
     }
 
     // ---------- MCP (Alexa+ add-on y cualquier cliente MCP) ----------
+    if (url.pathname === '/mcp/public') return mcpPublic(req, env, url);
     if (url.pathname === '/mcp') return mcp(req, env, url);
     if (url.pathname === '/.well-known/oauth-protected-resource' || url.pathname === '/.well-known/oauth-protected-resource/mcp') {
       return json({ resource: url.origin + '/mcp', authorization_servers: [url.origin], scopes_supported: [MCP_SCOPE], bearer_methods_supported: ['header'], resource_name: 'Mi bus A Coruña' });
@@ -869,4 +871,306 @@ async function verifyToken(token, env, origin) {
     const c = JSON.parse(fromB64url(payload));
     return c.aud === origin + '/mcp' && c.scope === MCP_SCOPE && c.exp > Math.floor(Date.now() / 1000);
   } catch (e) { return false; }
+}
+
+// =====================================================================
+// MCP PÚBLICO (/mcp/public): genérico, sin datos personales ni auth.
+// Herramientas: buscar_parada, paradas_cercanas, proximos_buses, horario_linea.
+// Caché en memoria (caches.default no funciona en *.workers.dev) + rate limit por IP.
+// =====================================================================
+
+var PUB_STOP_TTL = 25e3;            // tiempos en vivo: 25 s por parada
+var PUB_META_TTL = 6 * 3600e3;      // paradas y líneas: 6 h
+var PUB_DEP_TTL = 6 * 3600e3;       // horarios programados: 6 h
+var PUB_RATE_PER_MIN = 60;          // peticiones por IP y minuto (por isolate)
+var pubCache = new Map();
+var pubHits = new Map();
+
+// Caché en memoria con deduplicación de peticiones en vuelo.
+// (caches.default no hace nada en *.workers.dev)
+function pubMemo(key, ttl, fn) {
+  const now = Date.now();
+  const hit = pubCache.get(key);
+  if (hit && hit.exp > now) return hit.p;
+  const p = Promise.resolve().then(fn);
+  const entry = { p, exp: now + ttl };
+  pubCache.set(key, entry);
+  p.catch(() => { if (pubCache.get(key) === entry) pubCache.delete(key); });
+  if (pubCache.size > 500) pubCache.delete(pubCache.keys().next().value);
+  return p;
+}
+
+function pubRateLimited(req) {
+  const ip = req.headers.get("cf-connecting-ip") || "anon";
+  const k = ip + ":" + Math.floor(Date.now() / 60000);
+  const n = (pubHits.get(k) || 0) + 1;
+  pubHits.set(k, n);
+  if (pubHits.size > 5000) pubHits.clear();
+  return n > PUB_RATE_PER_MIN;
+}
+
+function pubMeta() {
+  return pubMemo("meta", PUB_META_TTL, async () => {
+    const m = await getMeta();
+    if (!m || !m.stops || !Object.keys(m.stops).length) throw new Error("meta vacía");
+    return m;
+  });
+}
+
+function pubStop(id) {
+  return pubMemo("stop:" + id, PUB_STOP_TTL, async () => {
+    const r = await fetch(API + "?dato=" + id + "&func=0", { headers: UPSTREAM_HEADERS, cache: "no-store" });
+    if (!r.ok) throw new Error("iTranvías " + r.status);
+    const j = JSON.parse(await r.text());
+    return { at: Date.now(), lineas: (j.buses && j.buses.lineas) || [] };
+  });
+}
+
+function pubDepartures(lineId, ymd) {
+  return pubMemo("dep:" + lineId + ":" + ymd, PUB_DEP_TTL, () => departures(lineId, ymd));
+}
+
+function pubLineName(meta, id) {
+  return (meta.lines[id] && meta.lines[id].n) || LINE_NAMES[id] || String(Math.floor(id / 100));
+}
+
+function pubStopName(meta, id) {
+  return speakStop(meta.stops[id] || "Parada " + id);
+}
+
+// Búsqueda de paradas por texto (sin alias personales tipo "casa").
+function pubSearchStops(meta, texto, limit = 8) {
+  const raw = String(texto == null ? "" : texto).trim();
+  if (/^\d+$/.test(raw) && meta.stops[raw]) return [Number(raw)];
+  const toks = wordsToNum(raw).split(" ").filter((t) => t && !STOP_WORDS.has(t));
+  if (!toks.length) return [];
+  if (toks.length === 1 && /^\d+$/.test(toks[0]) && meta.stops[toks[0]]) return [Number(toks[0])];
+  const nums = toks.filter((t) => /^\d+$/.test(t));
+  const scored = [];
+  for (const id in meta.stops) {
+    const nt = wordsToNum(meta.stops[id]).split(" ");
+    if (nums.some((n) => nt.indexOf(n) < 0)) continue;
+    const score = toks.filter((t) => nt.indexOf(t) >= 0 || (t.length > 3 && nt.some((x) => x.startsWith(t)))).length;
+    if (score > 0 && score >= Math.min(2, toks.length)) scored.push({ id: Number(id), score });
+  }
+  scored.sort((a, b) => b.score - a.score || a.id - b.id);
+  const best = scored.length ? scored[0].score : 0;
+  return scored.filter((s) => s.score === best).slice(0, limit).map((s) => s.id);
+}
+
+// Coordenadas de iTranvías → [lat, lon] en grados (o null si no son grados).
+function pubLatLon(p) {
+  if (!p || p.length < 2) return null;
+  const a = Number(p[0]), b = Number(p[1]);
+  if (!isFinite(a) || !isFinite(b) || Math.abs(a) > 180 || Math.abs(b) > 180) return null;
+  return a > 0 && b < 0 ? [a, b] : [b, a]; // Galicia: lat > 0, lon < 0
+}
+
+function pubDist(a, b) {
+  const R = 6371e3, r = Math.PI / 180;
+  const dLa = (b[0] - a[0]) * r, dLo = (b[1] - a[1]) * r;
+  const h = Math.sin(dLa / 2) ** 2 + Math.cos(a[0] * r) * Math.cos(b[0] * r) * Math.sin(dLo / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+async function pubLiveText(meta, sid, lineId, max = 3) {
+  const head = "Parada " + sid + " — " + pubStopName(meta, sid);
+  let d;
+  try { d = await pubStop(sid); } catch (e) { return head + ": iTranvías no responde ahora mismo."; }
+  const elapsed = (Date.now() - d.at) / 60000;
+  const now = madridNow().min;
+  const items = [];
+  for (const l of d.lineas) {
+    if (lineId && l.linea !== lineId) continue;
+    const mins = (l.buses || [])
+      .map((b) => Math.max(0, Math.round(parseMin(b.tiempo) - elapsed)))
+      .sort((a, b) => a - b)
+      .slice(0, max);
+    if (mins.length) items.push({ n: pubLineName(meta, l.linea), mins });
+  }
+  items.sort((a, b) => a.mins[0] - b.mins[0]);
+  if (!items.length) {
+    return head + ": no hay buses próximos" + (lineId ? " de la línea " + pubLineName(meta, lineId) : "") + ".";
+  }
+  return head + "\n" + items.map((x) =>
+    "- Línea " + x.n + ": " + x.mins.map((m) => (m <= 1 ? "llegando" : m + " min (" + fmt(now + m) + ")")).join(", ")
+  ).join("\n");
+}
+
+var PUB_RO = { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: true };
+
+var PUB_TOOLS = [
+  {
+    name: "buscar_parada",
+    title: "Buscar parada",
+    description: 'Find A Coruña (Spain) city bus stops by street or place name, or by stop number. Returns stop numbers and names. Use it to resolve a stop before calling proximos_buses when the user gives a vague place. Reply in the user\'s language.',
+    inputSchema: {
+      type: "object",
+      properties: { texto: { type: "string", description: 'Calle, lugar o número de parada, p. ej. "Ronda de Outeiro 126", "Cuatro Caminos", "523"' } },
+      required: ["texto"],
+      additionalProperties: false
+    },
+    annotations: PUB_RO,
+    validate: (a) => (String(a.texto || "").trim().length < 2 ? "Indica al menos 2 caracteres." : null),
+    run: async (a) => {
+      const meta = await pubMeta();
+      const ids = pubSearchStops(meta, a.texto, 8);
+      if (!ids.length) return "No encuentro paradas para «" + a.texto + "». Prueba con el nombre de la calle.";
+      return "Paradas encontradas:\n" + ids.map((id) => "- Parada " + id + ": " + pubStopName(meta, id)).join("\n");
+    }
+  },
+  {
+    name: "paradas_cercanas",
+    title: "Paradas cercanas",
+    description: "Nearest A Coruña city bus stops to a location (latitude/longitude), with live arrivals for the closest ones. Use for \"¿qué bus pasa cerca de mí?\" when the client knows the user's location or a place's coordinates.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        lat: { type: "number", description: "Latitud (grados decimales)" },
+        lon: { type: "number", description: "Longitud (grados decimales)" },
+        radio_m: { type: "integer", minimum: 50, maximum: 1500, description: "Radio de búsqueda en metros (por defecto 400)" },
+        con_tiempos: { type: "boolean", description: "Incluir tiempos en vivo de las 3 más cercanas (por defecto true)" }
+      },
+      required: ["lat", "lon"],
+      additionalProperties: false
+    },
+    annotations: PUB_RO,
+    validate: (a) => (typeof a.lat !== "number" || typeof a.lon !== "number" || Math.abs(a.lat) > 90 || Math.abs(a.lon) > 180 ? "lat y lon deben ser números en grados." : null),
+    run: async (a) => {
+      const meta = await pubMeta();
+      const here = [a.lat, a.lon];
+      const radio = Math.min(1500, Math.max(50, a.radio_m || 400));
+      const all = [];
+      for (const id in meta.pos || {}) {
+        const p = pubLatLon(meta.pos[id]);
+        if (p) all.push({ id: Number(id), m: Math.round(pubDist(here, p)) });
+      }
+      if (!all.length) return "No tengo coordenadas de paradas ahora mismo. Usa buscar_parada con el nombre de la calle.";
+      all.sort((x, y) => x.m - y.m);
+      if (all[0].m > 5000) return "Esa ubicación está fuera de la red de buses de A Coruña.";
+      const near = all.filter((x) => x.m <= radio).slice(0, 5);
+      if (!near.length) return "No hay paradas a menos de " + radio + " m. La más cercana es la " + all[0].id + " (" + pubStopName(meta, all[0].id) + "), a " + all[0].m + " m.";
+      let text = "Paradas cercanas:\n" + near.map((x) => "- Parada " + x.id + ": " + pubStopName(meta, x.id) + " (" + x.m + " m)").join("\n");
+      if (a.con_tiempos !== false) {
+        const live = await Promise.all(near.slice(0, 3).map((x) => pubLiveText(meta, x.id, null, 2)));
+        text += "\n\nPróximos buses:\n" + live.join("\n\n");
+      }
+      return text;
+    }
+  },
+  {
+    name: "proximos_buses",
+    title: "Próximos buses en una parada",
+    description: 'Live next arrivals (iTranvías real time) at an A Coruña city bus stop, optionally filtered by line. Give the stop by number or by street/place name. Use for "¿cuándo pasa el 14 por Outeiro 126?", "¿qué buses pasan por Cuatro Caminos?".',
+    inputSchema: {
+      type: "object",
+      properties: {
+        parada: { type: "string", description: 'Calle o lugar de la parada, p. ej. "Ronda de Outeiro 126"' },
+        numero_parada: { type: "integer", minimum: 1, description: "Número de parada de iTranvías" },
+        linea: { type: "string", description: 'Línea opcional, p. ej. "14" o "12A"' }
+      },
+      additionalProperties: false
+    },
+    annotations: PUB_RO,
+    validate: (a) => (a.parada || a.numero_parada ? null : "Indica una parada (nombre o número)."),
+    run: async (a) => {
+      const meta = await pubMeta();
+      let lineId = null;
+      if (a.linea) {
+        lineId = findLine(meta, a.linea);
+        if (!lineId) return "No conozco la línea «" + a.linea + "».";
+      }
+      let ids = [];
+      if (a.numero_parada && meta.stops[a.numero_parada]) ids = [Number(a.numero_parada)];
+      else if (a.numero_parada && !a.parada) return "No existe la parada " + a.numero_parada + ".";
+      else ids = pubSearchStops(meta, a.parada, 8);
+      if (!ids.length) return "No encuentro la parada «" + (a.parada || a.numero_parada) + "». Prueba buscar_parada.";
+      if (ids.length > 2) {
+        return "Hay varias paradas que encajan; pide el número:\n" + ids.map((id) => "- Parada " + id + ": " + pubStopName(meta, id)).join("\n");
+      }
+      // 1 o 2 resultados (p. ej. la misma calle a cada lado): se muestran ambos
+      const out = await Promise.all(ids.map((id) => pubLiveText(meta, id, lineId, 3)));
+      return out.join("\n\n");
+    }
+  },
+  {
+    name: "horario_linea",
+    title: "Horario programado de una línea",
+    description: "Scheduled departure times of an A Coruña city bus line from each terminus for a given date (not times at intermediate stops). Use for first/last bus questions or planning ahead.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        linea: { type: "string", description: 'Línea, p. ej. "14" o "12A"' },
+        fecha: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$", description: "Fecha YYYY-MM-DD (por defecto hoy)" },
+        desde: { type: "string", pattern: "^\\d{1,2}(:\\d{2})?$", description: "Solo salidas a partir de esta hora (HH:MM, opcional)" }
+      },
+      required: ["linea"],
+      additionalProperties: false
+    },
+    annotations: PUB_RO,
+    validate: (a) => (!a.linea ? "Indica la línea." : a.fecha && !/^\d{4}-\d{2}-\d{2}$/.test(a.fecha) ? "fecha debe ser YYYY-MM-DD." : a.desde && parseHHMM(a.desde) == null ? "desde debe ser HH:MM." : null),
+    run: async (a) => {
+      const meta = await pubMeta();
+      const lineId = findLine(meta, a.linea);
+      if (!lineId) return "No conozco la línea «" + a.linea + "».";
+      const date = a.fecha || madridNow().date;
+      const dep = await pubDepartures(lineId, date.replace(/-/g, ""));
+      const info = meta.lines[lineId] || {};
+      const desde = a.desde ? parseHHMM(a.desde) : null;
+      const pick = (arr) => {
+        const xs = (arr || []).filter((m) => desde == null || m >= desde);
+        return desde == null ? xs : xs.slice(0, 10);
+      };
+      const ida = pick(dep.ida), vuelta = pick(dep.vuelta);
+      const n = pubLineName(meta, lineId);
+      if (!ida.length && !vuelta.length) return "La línea " + n + " no tiene salidas" + (desde != null ? " a partir de las " + fmt(desde) : "") + " el " + date + ".";
+      const block = (from, to, xs) => xs.length ? "Desde " + (from || "cabecera") + (to ? " hacia " + to : "") + ": " + xs.map(fmt).join(", ") : "";
+      return ["Línea " + n + " — " + date + (dep.tipo ? " (" + dep.tipo + ")" : "") + ". Horas de salida desde cabecera:",
+        block(info.o, info.d, ida), block(info.d, info.o, vuelta)].filter(Boolean).join("\n");
+    }
+  }
+];
+
+async function mcpPublic(req, env, url) {
+  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: MCP_CORS });
+  if (req.method !== "POST") return new Response("Method Not Allowed", { status: 405, headers: { allow: "POST, OPTIONS", ...MCP_CORS } });
+  if (pubRateLimited(req)) return rpcError(null, -32000, "Demasiadas peticiones, espera un minuto.", 429);
+  let msg;
+  try { msg = await req.json(); } catch (e) { return rpcError(null, -32700, "Parse error", 400); }
+  if (Array.isArray(msg) || !msg || msg.jsonrpc !== "2.0" || typeof msg.method !== "string") {
+    if (msg && !Array.isArray(msg) && msg.jsonrpc === "2.0" && msg.method === void 0) return new Response(null, { status: 202, headers: MCP_CORS });
+    return rpcError(null, -32600, "Invalid Request", 400);
+  }
+  if (msg.id === void 0) return new Response(null, { status: 202, headers: MCP_CORS });
+  const id = msg.id, params = msg.params || {};
+  switch (msg.method) {
+    case "initialize": {
+      const asked = params.protocolVersion;
+      return rpc(id, {
+        protocolVersion: MCP_VERSIONS.includes(asked) ? asked : MCP_VERSIONS[0],
+        capabilities: { tools: { listChanged: false } },
+        serverInfo: { name: "bus-coruna", title: "Bus A Coruña", version: "1.0.0" },
+        instructions: "Buses urbanos de A Coruña (iTranvías): paradas, tiempos de llegada en vivo y horarios programados. Si el usuario da un lugar vago, usa buscar_parada o paradas_cercanas primero. Recuerda tú (el cliente) sus paradas habituales; este servidor no guarda nada del usuario. Fuente no oficial: los tiempos pueden fallar."
+      });
+    }
+    case "ping":
+      return rpc(id, {});
+    case "tools/list":
+      return rpc(id, { tools: PUB_TOOLS.map(({ run, validate, ...t }) => t) });
+    case "tools/call": {
+      const tool = PUB_TOOLS.find((t) => t.name === params.name);
+      if (!tool) return rpcError(id, -32602, "Unknown tool: " + params.name);
+      const args = params.arguments && typeof params.arguments === "object" ? params.arguments : {};
+      const bad = tool.validate && tool.validate(args);
+      if (bad) return rpc(id, { content: [{ type: "text", text: bad }], isError: true });
+      try {
+        const text = await tool.run(args);
+        return rpc(id, { content: [{ type: "text", text: text || "No tengo datos ahora mismo." }], isError: false });
+      } catch (e) {
+        return rpc(id, { content: [{ type: "text", text: "No he podido consultar iTranvías. Prueba en un momento." }], isError: true });
+      }
+    }
+    default:
+      return rpcError(id, -32601, "Method not found: " + msg.method);
+  }
 }

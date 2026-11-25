@@ -30,3 +30,14 @@ alexa-ai deploy
 ```
 
 Prueba rápida del servidor: `npx @modelcontextprotocol/inspector` → Streamable HTTP → `https://mibus.<subdominio>.workers.dev/mcp`.
+
+### MCP público y genérico (`POST /mcp/public`)
+
+Versión para compartir con cualquiera: sin autenticación y sin datos personales (no hay alias de "casa"/"trabajo" ni trayectos fijos). El servidor no guarda nada del usuario; sus paradas habituales las recuerda el cliente.
+
+- `buscar_parada` — paradas por calle, lugar o número.
+- `paradas_cercanas` — paradas más cercanas a una latitud/longitud, con tiempos en vivo de las 3 primeras.
+- `proximos_buses` — llegadas en vivo en una parada (nombre o número), con filtro de línea opcional.
+- `horario_linea` — horario programado de salidas desde cabecera para una fecha.
+
+Caché en memoria (25 s por parada, 6 h para el catálogo y horarios; `caches.default` no funciona en `*.workers.dev`) y límite de 60 peticiones/min por IP. Conéctalo como conector personalizado con `https://mibus.<subdominio>.workers.dev/mcp/public`.
