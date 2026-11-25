@@ -711,6 +711,255 @@ const HORA_RE = /^\d{1,2}(:\d{2})?$/;
 const FECHA_RE = /^\d{4}-\d{2}-\d{2}$/;
 const RO = { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: true };
 
+// =====================================================================
+// MCP Apps (extensión io.modelcontextprotocol/ui, SEP-1865): panel de llegadas
+// dentro del chat (Claude, ChatGPT, VS Code…). Las herramientas con
+// _meta.ui.resourceUri devuelven texto (para el modelo y clientes sin UI) y
+// structuredContent (para el panel). El panel es HTML sin dependencias que
+// habla con el host por postMessage (JSON-RPC) y puede refrescar llamando a
+// la misma herramienta con tools/call.
+// =====================================================================
+var UI_URI = "ui://mibus/llegadas.html";
+var UI_MIME = "text/html;profile=mcp-app";
+var UI_META = { ui: { resourceUri: UI_URI }, "openai/outputTemplate": UI_URI };
+
+function uiResourceList() {
+  return { resources: [{ uri: UI_URI, name: "llegadas", title: "Panel de llegadas", description: "Panel con los próximos buses de A Coruña", mimeType: UI_MIME }] };
+}
+
+function uiResourceRead(uri) {
+  if (uri !== UI_URI) return null;
+  return { contents: [{ uri: UI_URI, mimeType: UI_MIME, text: UI_HTML, _meta: { ui: { prefersBorder: true } } }] };
+}
+
+// Llegadas de varias paradas en forma de datos para el panel.
+// opts.lineId: solo esa línea; opts.lines[sid]: líneas permitidas por parada; opts.walk[sid]: minutos andando; opts.dist[sid]: metros.
+async function uiBoards(meta, stops, opts = {}) {
+  const now = madridNow().min;
+  return Promise.all(stops.map(async (sid) => {
+    const b = { id: sid, nombre: pubStopName(meta, sid) };
+    if (opts.walk && opts.walk[sid] != null) b.andando = opts.walk[sid];
+    if (opts.dist && opts.dist[sid] != null) b.metros = opts.dist[sid];
+    let d;
+    try { d = await pubStop(sid); } catch (e) { b.error = "iTranvías no responde ahora mismo"; b.llegadas = []; return b; }
+    if (d.stale) { b.stale = true; b.edad_s = d.age; }
+    const elapsed = (Date.now() - d.at) / 60000;
+    const out = [];
+    for (const l of d.lineas || []) {
+      if (opts.lineId && l.linea !== opts.lineId) continue;
+      const allowed = opts.lines && opts.lines[sid];
+      if (allowed && allowed.indexOf(l.linea) < 0) continue;
+      const info = meta.lines[l.linea] || {};
+      for (const bus of (l.buses || []).slice(0, 3)) {
+        const min = Math.max(0, Math.round(parseMin(bus.tiempo) - elapsed));
+        out.push({ linea: pubLineName(meta, l.linea), color: info.c || null, min, hora: fmt(now + min), metros: Number(bus.distancia) || null });
+      }
+    }
+    out.sort((x, y) => x.min - y.min);
+    b.llegadas = out.slice(0, 8);
+    return b;
+  }));
+}
+
+function uiPayload(titulo, paradas, refresh, extra = {}) {
+  return { titulo, generado: Date.now(), paradas, refresh, ...extra };
+}
+
+var UI_HTML = String.raw`<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mi bus</title>
+<style>
+:root{
+  --bg:var(--color-background-primary,#fff);--bg2:var(--color-background-secondary,#f4f5f7);
+  --tx:var(--color-text-primary,#16181d);--tx2:var(--color-text-secondary,#5d6470);--tx3:var(--color-text-tertiary,#8a919c);
+  --bd:var(--color-border-tertiary,#e3e5e9);--ok:var(--color-text-success,#1a7f45);--warn:var(--color-text-warning,#a15c00);--bad:var(--color-text-danger,#c4291c);
+  --font:var(--font-sans,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif);
+}
+[data-theme=dark]{
+  --bg:var(--color-background-primary,#1b1d22);--bg2:var(--color-background-secondary,#25282e);
+  --tx:var(--color-text-primary,#eef0f3);--tx2:var(--color-text-secondary,#a7adb7);--tx3:var(--color-text-tertiary,#7c838d);
+  --bd:var(--color-border-tertiary,#33373e);--ok:var(--color-text-success,#4cc38a);--warn:var(--color-text-warning,#f0b354);--bad:var(--color-text-danger,#ff7a6b);
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:transparent;color:var(--tx);font-family:var(--font);font-size:14px;-webkit-font-smoothing:antialiased}
+.wrap{padding:14px 16px 12px}
+header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:10px}
+h1{font-size:15px;font-weight:650;margin:0;letter-spacing:-.01em}
+.meta{color:var(--tx3);font-size:12px;white-space:nowrap;display:flex;align-items:center;gap:8px}
+button{font:inherit;font-size:12px;color:var(--tx2);background:var(--bg2);border:1px solid var(--bd);border-radius:999px;padding:3px 10px;cursor:pointer}
+button:hover{color:var(--tx)}
+button[disabled]{opacity:.5;cursor:default}
+.stop{border-top:1px solid var(--bd);padding:10px 0 4px}
+.stop:first-of-type{border-top:0;padding-top:2px}
+.sh{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:6px}
+.sn{font-weight:600;font-size:13px}
+.sx{color:var(--tx3);font-size:12px;white-space:nowrap}
+.row{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:10px;padding:5px 0}
+.ln{min-width:34px;height:24px;padding:0 7px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;color:#fff;background:#555}
+.to{color:var(--tx2);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.to b{color:var(--tx);font-weight:600;font-size:13px}
+.right{text-align:right;white-space:nowrap}
+.min{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.min small{font-size:11px;font-weight:600;color:var(--tx3);margin-right:4px;text-transform:uppercase;letter-spacing:.04em}
+.now{color:var(--ok)}
+.lv{display:block;font-size:12px;font-weight:600;margin-top:1px}
+.lv.ok{color:var(--ok)}.lv.warn{color:var(--warn)}.lv.bad{color:var(--bad)}.lv.gone{color:var(--tx3);font-weight:500}
+.empty,.err{color:var(--tx3);font-size:13px;padding:4px 0 8px}
+.err{color:var(--bad)}
+.stale{color:var(--warn);font-size:12px}
+.loading{color:var(--tx3);padding:18px 0;text-align:center}
+footer{color:var(--tx3);font-size:11px;margin-top:8px}
+</style></head>
+<body><div class="wrap" id="app"><div class="loading">Cargando llegadas…</div></div>
+<script>
+(function(){
+  var data = null, gotAt = 0, nextId = 1, pending = {}, busy = false;
+  var app = document.getElementById("app");
+
+  function post(m){ try { window.parent.postMessage(m, "*"); } catch (e) {} }
+  function request(method, params){
+    var id = nextId++;
+    post({ jsonrpc: "2.0", id: id, method: method, params: params || {} });
+    return new Promise(function(res, rej){ pending[id] = { res: res, rej: rej }; setTimeout(function(){ if (pending[id]) { delete pending[id]; rej(new Error("timeout")); } }, 20000); });
+  }
+  function notify(method, params){ post({ jsonrpc: "2.0", method: method, params: params || {} }); }
+
+  function applyContext(ctx){
+    if (!ctx) return;
+    if (ctx.theme) document.documentElement.setAttribute("data-theme", ctx.theme);
+    var v = ctx.styles && ctx.styles.variables;
+    if (v) for (var k in v) if (v[k]) document.documentElement.style.setProperty(k, v[k]);
+  }
+
+  function esc(s){ return String(s == null ? "" : s).replace(/[&<>"']/g, function(c){ return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+  function pad(n){ return (n < 10 ? "0" : "") + n; }
+  function clock(ms){ var d = new Date(ms); return pad(d.getHours()) + ":" + pad(d.getMinutes()); }
+
+  function onResult(r){
+    if (!r) return;
+    var sc = r.structuredContent;
+    if (sc && sc.paradas) { data = sc; gotAt = Date.now(); render(); return; }
+    var t = (r.content || []).filter(function(c){ return c.type === "text"; }).map(function(c){ return c.text; }).join("\n");
+    app.innerHTML = '<div class="empty" style="white-space:pre-wrap">' + esc(t || "Sin datos.") + "</div>";
+    resize();
+  }
+
+  // Como en el widget: lo grande es la hora a la que pasa; debajo, cuándo salir. Sin segundos.
+  function leave(min, walk){
+    var s = min - walk;
+    if (s <= 0) return '<span class="lv bad">¡sal ya! · en ' + min + " min</span>";
+    return '<span class="lv ' + (s < 5 ? "bad" : s < 10 ? "warn" : "ok") + '">🚶 sal ' + clock(gotAt + s * 60000) + " · en " + s + " min</span>";
+  }
+
+  function render(){
+    if (!data) return;
+    var drift = Math.floor((Date.now() - gotAt) / 60000);
+    var h = "<header><h1>" + esc(data.titulo || "Próximos buses") + '</h1><div class="meta"><span>' + clock(gotAt) + "</span>";
+    if (data.refresh) h += '<button id="rf"' + (busy ? " disabled" : "") + ">" + (busy ? "Actualizando…" : "Actualizar") + "</button>";
+    h += "</div></header>";
+    var single = (data.paradas || []).length === 1;
+    (data.paradas || []).forEach(function(p){
+      var same = single && data.titulo === p.nombre;
+      h += '<section class="stop"><div class="sh"><span class="sn">' + (same ? "" : esc(p.nombre)) + '</span><span class="sx">';
+      var bits = [];
+      if (p.andando != null) bits.push("🚶 " + p.andando + " min");
+      if (p.metros != null) bits.push(p.metros + " m");
+      bits.push("nº " + p.id);
+      h += esc(bits.join(" · ")) + "</span></div>";
+      if (p.stale) h += '<div class="stale">Dato de hace ' + Math.max(1, Math.round((p.edad_s || 0) / 60) + drift) + " min (iTranvías no responde)</div>";
+      // En un trayecto solo se muestran los buses a los que llegas andando; como mucho 4 por parada.
+      var list = (p.llegadas || []).filter(function(b){ return b.min - drift >= (p.andando != null ? p.andando : 0); }).slice(0, 4);
+      if (p.error && !(p.llegadas || []).length) h += '<div class="err">' + esc(p.error) + "</div>";
+      else if (!list.length) h += '<div class="empty">' + (p.andando != null && (p.llegadas || []).length ? "Ninguno al que llegues andando." : "Sin buses próximos.") + "</div>";
+      list.forEach(function(b){
+        var m = Math.max(0, b.min - drift);
+        var bg = b.color ? ' style="background:' + esc(/^#?[0-9a-f]{3,8}$/i.test(b.color) ? (b.color[0] === "#" ? b.color : "#" + b.color) : "#555") + '"' : "";
+        h += '<div class="row"><span class="ln"' + bg + ">" + esc(b.linea) + "</span>";
+        h += '<span class="to">' + (b.hacia ? "→ " + esc(b.hacia) : "") + (b.metros ? (b.hacia ? " · " : "") + (b.metros >= 1000 ? (b.metros / 1000).toFixed(1).replace(".", ",") + " km" : b.metros + " m") : "") + "</span>";
+        h += '<span class="right">' + (m <= 0 ? '<span class="min now">llegando</span>' : '<span class="min"><small>pasa </small>' + clock(gotAt + m * 60000) + "</span>");
+        if (p.andando != null) h += leave(m, p.andando); else if (m > 0) h += '<span class="lv gone">en ' + m + " min</span>";
+        h += "</span></div>";
+      });
+      h += "</section>";
+    });
+    h += "<footer>Datos en vivo de iTranvías · fuente no oficial</footer>";
+    app.innerHTML = h;
+    var rf = document.getElementById("rf");
+    if (rf) rf.onclick = refresh;
+    resize();
+  }
+
+  function refresh(){
+    if (busy || !data || !data.refresh) return;
+    busy = true; render();
+    var done = function(){ busy = false; render(); };
+    if (window.openai && window.openai.callTool) {
+      window.openai.callTool(data.refresh.tool, data.refresh.arguments || {}).then(function(r){ busy = false; onResult(r && (r.structuredContent ? r : { structuredContent: r })); }, done);
+      return;
+    }
+    request("tools/call", { name: data.refresh.tool, arguments: data.refresh.arguments || {} }).then(function(r){ busy = false; onResult(r); }, done);
+  }
+
+  var lastH = 0;
+  function resize(){
+    var h = Math.ceil(document.documentElement.scrollHeight);
+    if (Math.abs(h - lastH) < 2) return;
+    lastH = h;
+    notify("ui/notifications/size-changed", { width: Math.ceil(document.documentElement.scrollWidth), height: h });
+  }
+  if (window.ResizeObserver) new ResizeObserver(resize).observe(document.body);
+
+  window.addEventListener("message", function(ev){
+    var m = ev.data;
+    if (!m || m.jsonrpc !== "2.0") return;
+    if (m.id != null && !m.method && pending[m.id]) {
+      var p = pending[m.id]; delete pending[m.id];
+      if (m.error) p.rej(new Error(m.error.message || "error")); else p.res(m.result);
+      return;
+    }
+    if (m.method && m.id != null) {
+      // Peticiones del host (ping, teardown…): respondemos vacío.
+      post({ jsonrpc: "2.0", id: m.id, result: {} });
+      return;
+    }
+    if (m.method === "ui/notifications/tool-result") onResult(m.params);
+    else if (m.method === "ui/notifications/host-context-changed") { applyContext(m.params); render(); }
+    else if (m.method === "ui/notifications/tool-cancelled") app.innerHTML = '<div class="empty">Consulta cancelada.</div>';
+  });
+
+  // Compatibilidad con el puente antiguo de ChatGPT (window.openai)
+  function fromOpenAI(){
+    var o = window.openai;
+    if (!o) return false;
+    if (o.theme) applyContext({ theme: o.theme });
+    if (o.toolOutput && o.toolOutput.paradas) { data = o.toolOutput; gotAt = Date.now(); render(); }
+    return true;
+  }
+  window.addEventListener("openai:set_globals", fromOpenAI);
+
+  request("ui/initialize", { appInfo: { name: "mibus-llegadas", version: "1.0.0" }, appCapabilities: {}, protocolVersion: "2026-01-26" })
+    .then(function(r){ applyContext(r && r.hostContext); notify("ui/notifications/initialized", {}); })
+    .catch(function(){ fromOpenAI(); });
+
+  setInterval(function(){ if (data) render(); }, 30000);
+})();
+</script></body></html>`;
+
+// Resultado de una herramienta: texto (modelo y clientes sin UI) + datos para el panel (MCP Apps).
+async function withUi(text, build) {
+  let structured = null;
+  try { structured = await build(); } catch (e) {}
+  return structured ? { text, structured } : text;
+}
+function toolResult(out) {
+  if (out && typeof out === 'object') {
+    const r = { content: [{ type: 'text', text: out.text || 'No tengo datos ahora mismo.' }], isError: false };
+    if (out.structured) r.structuredContent = out.structured;
+    return r;
+  }
+  return { content: [{ type: 'text', text: out || 'No tengo datos ahora mismo.' }], isError: false };
+}
+
 const MCP_TOOLS = [
   {
     name: 'proximos_buses',
@@ -720,7 +969,19 @@ const MCP_TOOLS = [
       'Only lists buses the user can still reach on foot. Answer in Spanish. Use for: "¿cuándo pasa mi bus?", "el bus al trabajo", "el bus a casa".',
     inputSchema: { type: 'object', properties: { trayecto: { type: 'string', enum: ['ida', 'vuelta'], description: 'ida = casa → trabajo; vuelta = trabajo → casa' } }, additionalProperties: false },
     annotations: RO,
-    run: (a) => runIntent(a.trayecto === 'ida' ? 'IdaIntent' : a.trayecto === 'vuelta' ? 'VueltaIntent' : null)
+    _meta: UI_META,
+    run: async (a) => {
+      const text = await runIntent(a.trayecto === 'ida' ? 'IdaIntent' : a.trayecto === 'vuelta' ? 'VueltaIntent' : null);
+      return withUi(text, async () => {
+        const trip = a.trayecto || defaultTrip('mcp', madridNow().min);
+        const meta = await pubMeta();
+        const st = ALEXA_TRIPS[trip];
+        const lines = {}, walk = {};
+        for (const x of st) { lines[x.id] = x.lines; walk[x.id] = x.walk; }
+        const boards = await uiBoards(meta, st.map((x) => x.id), { lines, walk });
+        return uiPayload(trip === 'ida' ? 'Ida · casa → trabajo' : 'Vuelta · trabajo → casa', boards, { tool: 'proximos_buses', arguments: { trayecto: trip } });
+      });
+    }
   },
   {
     name: 'consultar_parada',
@@ -739,7 +1000,32 @@ const MCP_TOOLS = [
     },
     annotations: RO,
     validate: (a) => (a.linea || a.parada || a.numero_parada) ? null : 'Indica una línea, una parada o un número de parada.',
-    run: (a) => runIntent('ConsultaIntent', { linea: a.linea, parada: a.parada, numero: a.numero_parada })
+    _meta: UI_META,
+    run: async (a) => {
+      const text = await runIntent('ConsultaIntent', { linea: a.linea, parada: a.parada, numero: a.numero_parada });
+      return withUi(text, async () => {
+        const meta = await pubMeta();
+        const lineId = a.linea ? findLine(meta, a.linea) : null;
+        if (a.linea && !lineId) return null;
+        const trip = defaultTrip('mcp', madridNow().min);
+        const mine = [...new Set(ALEXA_TRIPS.ida.concat(ALEXA_TRIPS.vuelta).map((x) => x.id))];
+        let stops = [], walk = null;
+        if (a.numero_parada && meta.stops[a.numero_parada]) stops = [Number(a.numero_parada)];
+        else if (a.parada) {
+          const f = findStop(meta, a.parada, mine);
+          if (!f || f.ambiguous) return null;
+          stops = [f.id];
+        } else if (lineId) {
+          stops = ALEXA_TRIPS[trip].map((x) => x.id);
+          walk = {};
+          for (const x of ALEXA_TRIPS[trip]) walk[x.id] = x.walk;
+        }
+        if (!stops.length) return null;
+        const boards = await uiBoards(meta, stops, { lineId, walk });
+        const title = lineId ? 'Línea ' + pubLineName(meta, lineId) + (stops.length === 1 ? ' · ' + pubStopName(meta, stops[0]) : '') : pubStopName(meta, stops[0]);
+        return uiPayload(title, boards, { tool: 'consultar_parada', arguments: a });
+      });
+    }
   },
   {
     name: 'planificar_viaje',
@@ -826,7 +1112,7 @@ async function mcp(req, env, url) {
       const asked = params.protocolVersion;
       return rpc(id, {
         protocolVersion: MCP_VERSIONS.includes(asked) ? asked : MCP_VERSIONS[0],
-        capabilities: { tools: { listChanged: false } },
+        capabilities: { tools: { listChanged: false }, resources: { listChanged: false } },
         serverInfo: { name: 'mibus', title: 'Mi bus A Coruña', version: '1.0.0' },
         instructions: 'Horarios en tiempo real de los buses urbanos de A Coruña (iTranvías) para los trayectos diarios del usuario: ida (casa → trabajo en El Corte Inglés) y vuelta. Las herramientas devuelven frases en español listas para decir en voz alta.'
       });
@@ -835,6 +1121,14 @@ async function mcp(req, env, url) {
       return rpc(id, {});
     case 'tools/list':
       return rpc(id, { tools: MCP_TOOLS.map(({ run, validate, ...t }) => t) });
+    case 'resources/list':
+      return rpc(id, uiResourceList());
+    case 'resources/templates/list':
+      return rpc(id, { resourceTemplates: [] });
+    case 'resources/read': {
+      const r = uiResourceRead(params.uri);
+      return r ? rpc(id, r) : rpcError(id, -32002, 'Resource not found: ' + params.uri);
+    }
     case 'tools/call': {
       const tool = MCP_TOOLS.find((t) => t.name === params.name);
       if (!tool) return rpcError(id, -32602, 'Unknown tool: ' + params.name);
@@ -842,8 +1136,7 @@ async function mcp(req, env, url) {
       const bad = tool.validate && tool.validate(args);
       if (bad) return rpc(id, { content: [{ type: 'text', text: bad }], isError: true });
       try {
-        const text = await tool.run(args);
-        return rpc(id, { content: [{ type: 'text', text: text || 'No tengo datos ahora mismo.' }], isError: false });
+        return rpc(id, toolResult(await tool.run(args)));
       } catch (e) {
         return rpc(id, { content: [{ type: 'text', text: 'No he podido consultar iTranvías. Prueba en un momento.' }], isError: true });
       }
@@ -1134,6 +1427,7 @@ var PUB_TOOLS = [
       additionalProperties: false
     },
     annotations: PUB_RO,
+    _meta: UI_META,
     validate: (a) => (typeof a.lat !== "number" || typeof a.lon !== "number" || Math.abs(a.lat) > 90 || Math.abs(a.lon) > 180 ? "lat y lon deben ser números en grados." : null),
     run: async (a) => {
       const meta = await pubMeta();
@@ -1153,6 +1447,11 @@ var PUB_TOOLS = [
       if (a.con_tiempos !== false) {
         const live = await Promise.all(near.slice(0, 3).map((x) => pubLiveText(meta, x.id, null, 2)));
         text += "\n\nPróximos buses:\n" + live.join("\n\n");
+        return withUi(text, async () => {
+          const top = near.slice(0, 3), dist = {};
+          for (const x of top) dist[x.id] = x.m;
+          return uiPayload("Paradas cercanas", await uiBoards(meta, top.map((x) => x.id), { dist }), { tool: "paradas_cercanas", arguments: a });
+        });
       }
       return text;
     }
@@ -1171,6 +1470,7 @@ var PUB_TOOLS = [
       additionalProperties: false
     },
     annotations: PUB_RO,
+    _meta: UI_META,
     validate: (a) => (a.parada || a.numero_parada ? null : "Indica una parada (nombre o número)."),
     run: async (a) => {
       const meta = await pubMeta();
@@ -1189,7 +1489,10 @@ var PUB_TOOLS = [
       }
       // 1 o 2 resultados (p. ej. la misma calle a cada lado): se muestran ambos
       const out = await Promise.all(ids.map((id) => pubLiveText(meta, id, lineId, 3)));
-      return out.join("\n\n");
+      return withUi(out.join("\n\n"), async () => {
+        const title = lineId ? "Línea " + pubLineName(meta, lineId) : ids.length === 1 ? pubStopName(meta, ids[0]) : "Próximos buses";
+        return uiPayload(title, await uiBoards(meta, ids, { lineId }), { tool: "proximos_buses", arguments: a });
+      });
     }
   },
   {
@@ -1247,7 +1550,7 @@ async function mcpPublic(req, env, url) {
       const asked = params.protocolVersion;
       return rpc(id, {
         protocolVersion: MCP_VERSIONS.includes(asked) ? asked : MCP_VERSIONS[0],
-        capabilities: { tools: { listChanged: false } },
+        capabilities: { tools: { listChanged: false }, resources: { listChanged: false } },
         serverInfo: { name: "bus-coruna", title: "Bus A Coruña", version: "1.0.0" },
         instructions: "Buses urbanos de A Coruña (iTranvías): paradas, tiempos de llegada en vivo y horarios programados. Si el usuario da un lugar vago, usa buscar_parada o paradas_cercanas primero. Recuerda tú (el cliente) sus paradas habituales; este servidor no guarda nada del usuario. Fuente no oficial: los tiempos pueden fallar."
       });
@@ -1256,6 +1559,14 @@ async function mcpPublic(req, env, url) {
       return rpc(id, {});
     case "tools/list":
       return rpc(id, { tools: PUB_TOOLS.map(({ run, validate, ...t }) => t) });
+    case "resources/list":
+      return rpc(id, uiResourceList());
+    case "resources/templates/list":
+      return rpc(id, { resourceTemplates: [] });
+    case "resources/read": {
+      const r = uiResourceRead(params.uri);
+      return r ? rpc(id, r) : rpcError(id, -32002, "Resource not found: " + params.uri);
+    }
     case "tools/call": {
       const tool = PUB_TOOLS.find((t) => t.name === params.name);
       if (!tool) return rpcError(id, -32602, "Unknown tool: " + params.name);
@@ -1263,8 +1574,7 @@ async function mcpPublic(req, env, url) {
       const bad = tool.validate && tool.validate(args);
       if (bad) return rpc(id, { content: [{ type: "text", text: bad }], isError: true });
       try {
-        const text = await tool.run(args);
-        return rpc(id, { content: [{ type: "text", text: text || "No tengo datos ahora mismo." }], isError: false });
+        return rpc(id, toolResult(await tool.run(args)));
       } catch (e) {
         return rpc(id, { content: [{ type: "text", text: "No he podido consultar iTranvías. Prueba en un momento." }], isError: true });
       }
