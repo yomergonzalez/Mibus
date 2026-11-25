@@ -939,19 +939,23 @@ function pubStopName(meta, id) {
 }
 
 // Búsqueda de paradas por texto (sin alias personales tipo "casa").
+// iTranvías da los nombres en gallego: se aceptan equivalentes en castellano.
+var PUB_ES_GL = { cuatro: "catro", puerta: "porta", playa: "praia", iglesia: "igrexa", puerto: "porto", universidad: "universidade", ayuntamiento: "concello", castillo: "castelo", nuevo: "novo", nueva: "nova", jardin: "xardin", jardines: "xardins", junta: "xunta", torre: "torre", estacion: "estacion" };
 function pubSearchStops(meta, texto, limit = 8) {
   const raw = String(texto == null ? "" : texto).trim();
   if (/^\d+$/.test(raw) && meta.stops[raw]) return [Number(raw)];
-  const toks = wordsToNum(raw).split(" ").filter((t) => t && !STOP_WORDS.has(t));
+  const toks = norm(raw).split(" ").filter((t) => t && !STOP_WORDS.has(t));
   if (!toks.length) return [];
   if (toks.length === 1 && /^\d+$/.test(toks[0]) && meta.stops[toks[0]]) return [Number(toks[0])];
   const nums = toks.filter((t) => /^\d+$/.test(t));
+  const words = toks.filter((t) => !/^\d+$/.test(t)).map((t) => [t, PUB_ES_GL[t] || t]);
+  const hit = (nt, w) => w.some((v) => nt.indexOf(v) >= 0 || (v.length > 3 && nt.some((x) => x.length > 3 && (x.startsWith(v) || v.startsWith(x)))));
   const scored = [];
   for (const id in meta.stops) {
-    const nt = wordsToNum(meta.stops[id]).split(" ");
+    const nt = norm(meta.stops[id]).split(" ");
     if (nums.some((n) => nt.indexOf(n) < 0)) continue;
-    const score = toks.filter((t) => nt.indexOf(t) >= 0 || (t.length > 3 && nt.some((x) => x.startsWith(t)))).length;
-    if (score > 0 && score >= Math.min(2, toks.length)) scored.push({ id: Number(id), score });
+    const score = nums.length + words.filter((w) => hit(nt, w)).length;
+    if (score > 0 && (words.length === 0 || words.some((w) => hit(nt, w)))) scored.push({ id: Number(id), score });
   }
   scored.sort((a, b) => b.score - a.score || a.id - b.id);
   const best = scored.length ? scored[0].score : 0;
