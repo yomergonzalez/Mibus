@@ -92,16 +92,14 @@ async function tryFetch(url, ms) {
   finally { clearTimeout(t); }
 }
 async function getJSON(direct, viaProxy) {
-  if (PROXY) { try { return await tryFetch(PROXY.replace(/\/$/, "") + viaProxy, 8000); } catch (e) {} }
-  const order = ROUTES.slice().sort((a, b) => (b.k === best) - (a.k === best));
-  for (const r of order) {
-    try {
-      const j = await tryFetch(r.f(direct), 9000);
-      if (best !== r.k) { best = r.k; try { localStorage.setItem("mibus-route", best); } catch (e) {} }
-      return j;
-    } catch (e) {}
-  }
-  throw new Error("sin conexión");
+  if (PROXY) { try { return await tryFetch(PROXY.replace(/\/$/, "") + viaProxy, 6000); } catch (e) {} }
+  const known = ROUTES.find((r) => r.k === best);
+  if (known) { try { return await tryFetch(known.f(direct), 5000); } catch (e) {} }
+  const others = ROUTES.filter((r) => r !== known);
+  return Promise.any(others.map((r) => tryFetch(r.f(direct), 8000).then((j) => {
+    if (best !== r.k) { best = r.k; try { localStorage.setItem("mibus-route", best); } catch (e) {} }
+    return j;
+  }))).catch(() => { throw new Error("sin conexión"); });
 }
 function getStop(id) {
   return getJSON(API + "?dato=" + id + "&func=0", "/api/stop?id=" + id).then((j) => {
@@ -177,7 +175,7 @@ function render() {
           (left <= 1 ? '<div class="min now">Llegando</div>' : '<div class="min">' + left + '<small>min</small></div>') +
           '<div class="at"><b>' + hhmm(d.at + b.t * 60000) + '</b><span>a ' + esc(km) + '</span></div></div>';
       }).join('') || '<div class="empty">Sin buses próximos ahora mismo.</div>';
-      if (d.err) rows = '<div class="err">No se pudo conectar con iTranvías ahora mismo. Pulsa Actualizar en unos segundos.</div>' + rows;
+      if (d.err && !(d.lineas || []).length) rows = '<div class="err">No se pudo conectar con iTranvías ahora mismo. Pulsa Actualizar.</div>'; else if (d.err) rows = '<div class="err">Sin conexión; mostrando el último dato.</div>' + rows;
     }
     const present = new Set((d && d.lineas || []).map((l) => l.linea));
     (s.lines || []).forEach((x) => present.add(x));
@@ -189,13 +187,23 @@ function render() {
   }).join('');
 }
 
+let busy = false;
+function saveLast() { try { localStorage.setItem("mibus-last", JSON.stringify(data)); } catch (e) {} }
+try { const l = JSON.parse(localStorage.getItem("mibus-last")) || {}; for (const k in l) if (Date.now() - l[k].at < 15 * 60000) data[k] = { at: l[k].at, lineas: l[k].lineas }; } catch (e) {}
+async function loadStop(id) {
+  try { data[id] = { at: Date.now(), lineas: await getStop(id) }; return true; }
+  catch (e) { data[id] = Object.assign({ at: Date.now(), lineas: [] }, data[id], { err: true }); return false; }
+}
 async function refresh() {
+  if (busy) return; busy = true;
   const stops = cfg[tab];
   $('upd').textContent = 'Actualizando…';
-  await Promise.all(stops.map((s) => getStop(s.id).then((lineas) => {
-    data[s.id] = { at: Date.now(), lineas: lineas };
-  }).catch(() => { data[s.id] = Object.assign({ at: Date.now(), lineas: [] }, data[s.id], { err: true }); })));
+  const ok = await Promise.all(stops.map((s) => loadStop(s.id).then((r) => { render(); return r; })));
+  const failed = stops.filter((s, i) => !ok[i]);
+  if (failed.length) await Promise.all(failed.map((s) => loadStop(s.id)));
   lastAt = Date.now();
+  busy = false;
+  saveLast();
   tick();
   render();
 }
@@ -240,11 +248,10 @@ $('res').onclick = (e) => {
 document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
 
 render();
-refresh();
+refresh().then(() => getMeta().then((m) => { meta = m || meta; render(); }).catch(() => {}));
 setInterval(refresh, 30000);
 setInterval(() => { tick(); }, 1000);
 setInterval(render, 15000);
-getMeta().then((m) => { meta = m || meta; render(); }).catch(() => {});
 }
 </script>
 </body></html>
