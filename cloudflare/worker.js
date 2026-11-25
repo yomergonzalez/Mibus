@@ -529,7 +529,7 @@ async function getMeta() {
 }
 
 // ---------- Alexa: consulta por línea y/o parada ----------
-const NUM_WORDS = { uno: 1, un: 1, una: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6, siete: 7, ocho: 8, nueve: 9, diez: 10, once: 11, doce: 12, trece: 13, catorce: 14, quince: 15, dieciseis: 16, diecisiete: 17, dieciocho: 18, diecinueve: 19, veinte: 20, veintiuno: 21, veintiun: 21, veintidos: 22, veintitres: 23, veinticuatro: 24 };
+const NUM_WORDS = { uno: 1, un: 1, una: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6, siete: 7, ocho: 8, nueve: 9, diez: 10, once: 11, doce: 12, trece: 13, catorce: 14, quince: 15, dieciseis: 16, diecisiete: 17, dieciocho: 18, diecinueve: 19, veinte: 20, veintiuno: 21, veintiun: 21, veintidos: 22, veintitres: 23, veinticuatro: 24, veinticinco: 25, veintiseis: 26, veintisiete: 27, veintiocho: 28, veintinueve: 29 };
 const STOP_ALIASES = { 'corte ingles': 40, 'el corte ingles': 40, 'trabajo': 40, 'casa': 50, 'mi casa': 50 };
 const STOP_WORDS = new Set(['de', 'del', 'la', 'el', 'los', 'las', 'a', 'en', 'por', 'parada', 'rda', 'ronda', 'av', 'avda', 'avenida', 'rua', 'calle', 'c', 'pza', 'praza', 'plaza', 'numero', 'n']);
 function norm(v) { return String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim(); }
@@ -558,10 +558,16 @@ function findLine(meta, spoken) {
   return null;
 }
 
+// iTranvías da los nombres de parada en gallego (Catro Camiños, Porta Real):
+// traduce las palabras habituales en castellano antes de buscar.
+function esToGl(q) {
+  return q.replace(/\bcuatro caminos\b/g, 'catro caminos')
+    .split(' ').map((w) => (w !== 'cuatro' && PUB_ES_GL[w]) || w).join(' ');
+}
 function findStop(meta, spoken, preferred) {
   const q = norm(spoken);
   if (STOP_ALIASES[q] != null) return { id: STOP_ALIASES[q] };
-  const toks = wordsToNum(q).split(' ').filter((t) => t && !STOP_WORDS.has(t));
+  const toks = wordsToNum(esToGl(q)).split(' ').filter((t) => t && !STOP_WORDS.has(t));
   if (!toks.length) return null;
   const nums = toks.filter((t) => /^\d+$/.test(t));
   let best = [], bestScore = 0;
