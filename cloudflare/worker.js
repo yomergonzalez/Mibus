@@ -18,13 +18,16 @@ export default {
     if (url.pathname === '/api/stop') {
       const id = parseInt(url.searchParams.get('id'), 10);
       if (!id || id < 1 || id > 99999) return json({ error: 'parada inválida' }, 400);
-      try {
-        const r = await fetch(API + '?dato=' + id + '&func=0', { headers: UPSTREAM_HEADERS, cache: 'no-store' });
-        const j = JSON.parse(await r.text());
-        return json({ parada: id, at: Date.now(), lineas: (j.buses && j.buses.lineas) || [] });
-      } catch (e) {
-        return json({ error: 'iTranvías no responde' }, 502);
+      // Caché de 25 s compartida con el MCP público y un reintento si iTranvías falla.
+      for (let i = 0; i < 2; i++) {
+        try {
+          const d = await pubStop(id);
+          return json({ parada: id, at: d.at, lineas: d.lineas });
+        } catch (e) {
+          if (i === 0) await new Promise((r) => setTimeout(r, 400));
+        }
       }
+      return json({ error: 'iTranvías no responde' }, 502);
     }
 
     if (url.pathname === '/api/meta') {
@@ -213,7 +216,7 @@ function render() {
       const buses = [];
       for (const l of d.lineas || []) {
         if (s.lines && s.lines.indexOf(l.linea) < 0) continue;
-        for (const b of l.buses || []) buses.push({ linea: l.linea, t: Number(b.tiempo), dist: Number(b.distancia) });
+        for (const b of l.buses || []) buses.push({ linea: l.linea, t: (String(b.tiempo).indexOf('<') >= 0 ? 0 : (parseFloat(String(b.tiempo).replace(/[^0-9.]/g, '')) || 0)), dist: Number(b.distancia) || 0 });
       }
       buses.sort((a, b) => a.t - b.t);
       rows = buses.slice(0, 4).map((b) => {
