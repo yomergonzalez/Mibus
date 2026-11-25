@@ -32,7 +32,15 @@
             "cuándo viene el bus",
             "el próximo bus",
             "a qué hora pasa el bus",
-            "cuánto falta para el bus"
+            "cuánto falta para el bus",
+            "cuándo pasa el autobús",
+            "cuándo viene el autobús",
+            "cuándo pasa el próximo",
+            "cuándo viene el próximo",
+            "el siguiente bus",
+            "cuándo pasa el siguiente",
+            "cuándo pasa mi bus",
+            "a qué hora pasa el próximo"
           ]
         },
         {
@@ -169,7 +177,10 @@
             "la parada {numero}",
             "cuándo pasa el bus por la parada {numero}",
             "cuándo pasa el {linea} por la parada {numero}",
-            "parada número {numero}"
+            "parada número {numero}",
+            "por {parada}",
+            "en {parada}",
+            "por la parada {numero}"
           ]
         }
       ],

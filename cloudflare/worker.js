@@ -303,9 +303,10 @@ const ALEXA_TRIPS = {
 };
 const LINE_NAMES = { 1200: '12', 1400: '14', 1500: '12 A', 2000: '20', 2200: '22' };
 
-function alexaSay(text, end = true) {
-  return new Response(JSON.stringify({ version: '1.0', response: { outputSpeech: { type: 'PlainText', text }, shouldEndSession: end } }),
-    { headers: { 'content-type': 'application/json; charset=utf-8' } });
+function alexaSay(text, end = true, attrs) {
+  const out = { version: '1.0', response: { outputSpeech: { type: 'PlainText', text }, shouldEndSession: end } };
+  if (attrs) out.sessionAttributes = attrs;
+  return new Response(JSON.stringify(out), { headers: { 'content-type': 'application/json; charset=utf-8' } });
 }
 
 function parseMin(v) {
@@ -346,17 +347,18 @@ async function alexa(req, env) {
   const intent = body.request && body.request.intent && body.request.intent.name;
   if (type === 'SessionEndedRequest') return alexaSay('', true);
   if (intent === 'AMAZON.StopIntent' || intent === 'AMAZON.CancelIntent') return alexaSay('Vale.');
-  if (intent === 'AMAZON.HelpIntent') return alexaSay('Puedes decir: cuándo pasa el bus, el bus al trabajo, o el bus a casa.', false);
+  if (intent === 'AMAZON.HelpIntent') return alexaSay('Puedes decir: cuándo pasa el bus, el bus a casa, cuándo pasa el 14, o qué buses pasan por Outeiro 126.', false);
 
   if (intent === 'LlegarIntent' || intent === 'SalirIntent') return alexaPlan(body.request.intent, intent === 'LlegarIntent' ? 'ida' : 'vuelta');
   if (intent === 'PasaIntent') return alexaPasa(body.request.intent);
-  if (intent === 'ConsultaIntent') return alexaConsulta(body.request.intent);
-  const hour = Number(new Intl.DateTimeFormat('es-ES', { timeZone: 'Europe/Madrid', hour: 'numeric', hourCycle: 'h23' }).format(new Date()));
-  let trip = hour < 15 ? 'ida' : 'vuelta';
-  if (intent === 'IdaIntent') trip = 'ida';
-  if (intent === 'VueltaIntent') trip = 'vuelta';
+  if (intent === 'ConsultaIntent') return alexaConsulta(body.request.intent, (body.session && body.session.attributes) || {});
+  return alexaCommute(intent === 'IdaIntent' ? 'ida' : intent === 'VueltaIntent' ? 'vuelta' : null);
+}
 
+// Respuesta por defecto: próximos buses del trayecto (ida antes de las 15:00, vuelta después).
+async function alexaCommute(trip) {
   NOW_MIN = madridNow().min;
+  if (!trip) trip = NOW_MIN < 15 * 60 ? 'ida' : 'vuelta';
   const buses = await nextBuses(trip);
   if (!buses.length) return alexaSay('Ahora mismo no tengo buses a los que te dé tiempo a llegar, o iTranvías no responde. Prueba en un momento.');
   const main = buses.filter((x) => x.main);
@@ -576,13 +578,30 @@ function findStop(meta, spoken, preferred) {
 
 function speakStop(name) { return String(name).replace(/^Rda\./, 'Ronda').replace(/^Av\./, 'Avenida').replace(/^Pza\./, 'Plaza'); }
 
-async function alexaConsulta(intent) {
+// "el bus", "el próximo"… no son líneas: Alexa a veces los mete en el hueco {linea}.
+const GENERIC_LINE = /^(el |mi |un )?(bus|autobus|proximo|siguiente|primero|proximo bus|siguiente bus|proximo autobus|siguiente autobus|mio)$/;
+function seq(mins) {
+  const [first, ...rest] = mins;
+  let t = when(first);
+  if (rest.length) {
+    const r = rest.map((m) => at(m).replace(/ de la (tarde|noche|madrugada)$/, ''));
+    t += '; luego ' + (r.length > 1 ? r.slice(0, -1).join(', ') + ' y ' + r[r.length - 1] : r[0]);
+  }
+  return t;
+}
+
+async function alexaConsulta(intent, attrs = {}) {
   NOW_MIN = madridNow().min;
   let meta;
   try { meta = await getMeta(); } catch (e) { return alexaSay('No he podido consultar iTranvías. Prueba en un momento.'); }
-  const lineSpoken = slot(intent, 'linea'), stopSpoken = slot(intent, 'parada'), num = slot(intent, 'numero');
+  let lineSpoken = slot(intent, 'linea');
+  const stopSpoken = slot(intent, 'parada'), num = slot(intent, 'numero');
+  if (lineSpoken && GENERIC_LINE.test(norm(lineSpoken))) lineSpoken = null;
+  // Respuesta de seguimiento ("por Cuatro Caminos") tras preguntar por una línea que no pasa por tus paradas.
+  if (!lineSpoken && (stopSpoken || num) && attrs.linea) lineSpoken = attrs.linea;
+  if (!lineSpoken && !stopSpoken && !num) return alexaCommute(null);
   const lineId = lineSpoken ? findLine(meta, lineSpoken) : null;
-  if (lineSpoken && !lineId) return alexaSay('No conozco la línea ' + lineSpoken + '.');
+  if (lineSpoken && !lineId) return alexaSay('No conozco la línea ' + lineSpoken + '. Dime el número, por ejemplo: cuándo pasa el 14.', false);
   const trip = NOW_MIN < 15 * 60 ? 'ida' : 'vuelta';
   const mine = [...new Set(ALEXA_TRIPS[trip].map((s) => s.id).concat(ALEXA_TRIPS[trip === 'ida' ? 'vuelta' : 'ida'].map((s) => s.id)))];
 
@@ -606,14 +625,17 @@ async function alexaConsulta(intent) {
         if (lineId && l.linea !== lineId) continue;
         const name = (meta.lines[l.linea] && meta.lines[l.linea].n) || String(l.linea);
         const mins = (l.buses || []).map((b) => Math.round(parseMin(b.tiempo))).sort((a, b) => a - b).slice(0, lineId ? 3 : 2);
-        if (mins.length) items.push({ name, first: mins[0], text: 'el ' + name.replace(/A$/, ' A') + ' ' + mins.map((m, i) => (i === 0 ? when(m) : at(m))).join(' y ') });
+        if (mins.length) items.push({ name, first: mins[0], text: 'el ' + name.replace(/A$/, ' A') + ' ' + seq(mins) });
       }
       items.sort((a, b) => a.first - b.first);
       if (items.length) parts.push({ sid, text: 'En ' + speakStop(meta.stops[sid] || sid) + ': ' + items.slice(0, 4).map((x) => x.text).join('; ') + '.' });
     } catch (e) {}
   }));
   if (!parts.length) {
-    if (lineId && !stopSpoken && !num) return alexaSay('Ahora mismo el ' + meta.lines[lineId].n + ' no tiene buses próximos por tus paradas. Puedes preguntarme por otra parada.');
+    if (lineId && !stopSpoken && !num) {
+      const n = meta.lines[lineId].n;
+      return alexaSay('El ' + n + ' no tiene buses próximos por tus paradas de ' + (trip === 'ida' ? 'ida' : 'vuelta') + '. ¿Por qué parada lo quieres? Por ejemplo: por Cuatro Caminos.', false, { linea: n });
+    }
     return alexaSay('Ahora mismo no hay buses próximos' + (lineId ? ' del ' + meta.lines[lineId].n : '') + ' en esa parada.');
   }
   parts.sort((a, b) => stops.indexOf(a.sid) - stops.indexOf(b.sid));
