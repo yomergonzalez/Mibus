@@ -313,7 +313,6 @@ async function nextBuses(trip) {
 let NOW_MIN = 0;
 function at(m) { return 'a ' + say(fmt(NOW_MIN + m)); }
 function when(m) { return m <= 1 ? 'ahora mismo, está llegando' : at(m) + ', en ' + m + ' minutos'; }
-function leave(m) { return m <= 1 ? 'Sal ya.' : 'Sal de casa ' + at(m) + '.'; }
 
 async function alexa(req, env) {
   let body = {};

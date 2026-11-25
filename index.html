@@ -85,7 +85,7 @@ footer{color:var(--mute);font-size:13px;text-align:center;padding:0 16px 28px}
 <main id="list"></main>
 <div class="tools">
   <section class="card" id="plan">
-    <h2>¿A qué hora salgo?</h2>
+    <h2>¿Qué bus cojo?</h2>
     <div class="pf">
       <label for="pt" id="pl">Llegar a las</label>
       <input id="pt" type="time" value="10:00">
@@ -380,8 +380,8 @@ async function runPlan() {
     if (!opts.length) { $('pr').innerHTML = '<div class="empty">No hay buses para esa hora.</div>'; return; }
     $('pr').innerHTML = (p.tipo ? '<div class="sub">' + esc(p.tipo) + '</div>' : '') + opts.map((o) => {
       const li = lineInfo(o.lineId);
-      return '<div class="row pr"><div class="chip" style="background:' + li.c + '">' + esc(li.n) + '</div><div class="mid"><div class="min">Sal ' + esc(o.leave) + (o.main ? '<span class="fav">★</span>' : '') + '</div>' +
-        '<div class="stp">Bus ' + esc(o.bus) + ' · ' + esc(o.stop) + '</div></div><div class="at"><b>' + esc(o.arrive) + '</b><span>' + (tab === 'ida' ? 'llegas' : 'en casa') + '</span></div></div>';
+      return '<div class="row pr"><div class="chip" style="background:' + li.c + '">' + esc(li.n) + '</div><div class="mid"><div class="min">' + esc(o.bus) + (o.main ? '<span class="fav">★</span>' : '') + '</div>' +
+        '<div class="stp">' + esc(o.stop) + '</div></div><div class="at"><b>' + esc(o.arrive) + '</b><span>' + (tab === 'ida' ? 'llegas' : 'en casa') + '</span></div></div>';
     }).join('');
   } catch (e) { $('pr').innerHTML = '<div class="err">No se pudo consultar el horario. Prueba otra vez.</div>'; }
 }
