@@ -42,16 +42,15 @@ async function handle(req, env, ctx) {
     if (url.pathname === '/api/stop') {
       const id = parseInt(url.searchParams.get('id'), 10);
       if (!id || id < 1 || id > 99999) return json({ error: 'parada inválida' }, 400);
-      // Caché de 25 s compartida con el MCP público y un reintento si iTranvías falla.
-      for (let i = 0; i < 2; i++) {
-        try {
-          const d = await pubStop(id);
-          return json({ parada: id, at: d.at, lineas: d.lineas, ...(d.stale ? { stale: true, edad_s: d.age } : {}) });
-        } catch (e) {
-          if (i === 0) await new Promise((r) => setTimeout(r, 400));
-        }
+      // Caché de 60 s compartida con Alexa y los MCP. Sin reintento: con el límite de
+      // iTranvías (4/min) un reintento solo gasta cupo; si falla, pubStop ya devuelve
+      // el último dato bueno.
+      try {
+        const d = await pubStop(id);
+        return json({ parada: id, at: d.at, lineas: d.lineas, ...(d.stale ? { stale: true, edad_s: d.age } : {}) });
+      } catch (e) {
+        return json({ error: 'iTranvías no responde', detalle: String((e && e.message) || e) }, 502);
       }
-      return json({ error: 'iTranvías no responde' }, 502);
     }
 
     if (url.pathname === '/api/meta') {
@@ -454,17 +453,17 @@ function madridNow() {
   return { date: p.year + '-' + p.month + '-' + p.day, min: Number(p.hour) * 60 + Number(p.minute) };
 }
 
-async function departures(line, date) {
-  const cache = caches.default;
-  const key = new Request('https://mibus.cache/servicios/' + line + '/' + date);
-  const hit = await cache.match(key);
-  if (hit) return hit.json();
+// caches.default no hace nada en *.workers.dev: antes cada llamada iba a iTranvías y
+// gastaba cupo. Ahora: memoria del isolate → D1 → iTranvías (12 h).
+function departures(line, date) {
+  return sharedCache('dep:' + line + ':' + date, 12 * 3600e3, () => fetchDepartures(line, date));
+}
+
+async function fetchDepartures(line, date) {
   const { j } = await upstreamJSON(API + '?func=8&dato=' + line + '&fecha=' + date, { headers: UPSTREAM_HEADERS });
   const sv = (j.servicios && j.servicios[0]) || {};
   const toMin = (a) => (a || []).map((n) => Math.floor(Number(n) / 100) * 60 + (Number(n) % 100));
-  const out = { tipo: sv.tipo || '', ida: toMin(sv.ida), vuelta: toMin(sv.vuelta) };
-  await cache.put(key, new Response(JSON.stringify(out), { headers: { 'cache-control': 'public, max-age=43200' } }));
-  return out;
+  return { tipo: sv.tipo || '', ida: toMin(sv.ida), vuelta: toMin(sv.vuelta) };
 }
 
 // ida: time = hora a la que quieres llegar. vuelta: time = hora a la que sales del trabajo.
@@ -551,11 +550,11 @@ async function alexaPasa(intent, src = 'alexa') {
 }
 
 // ---------- Catálogo de líneas y paradas (cacheado 1 día) ----------
-async function getMeta() {
-  const cache = caches.default;
-  const key = new Request('https://mibus.cache/meta/v2');
-  const hit = await cache.match(key);
-  if (hit) return hit.json();
+function getMeta() {
+  return sharedCache('meta:v2', 24 * 3600e3, fetchMeta);
+}
+
+async function fetchMeta() {
   const { j } = await upstreamJSON(API + '?dato=20160101T000000_gl_0_20160101T000000&func=7', { headers: UPSTREAM_HEADERS });
   const a = (j.iTranvias && j.iTranvias.actualizacion) || {};
   const lines = {}, stops = {}, pos = {};
@@ -565,9 +564,8 @@ async function getMeta() {
     lines[l.id] = { n: l.lin_comer, c: c, o: l.nombre_orig, d: l.nombre_dest };
   }
   for (const p of a.paradas || []) { stops[p.id] = p.nombre; if (p.posy && p.posx) pos[p.id] = [Number(p.posy), Number(p.posx)]; }
-  const out = { lines, stops, pos };
-  if (Object.keys(stops).length) await cache.put(key, new Response(JSON.stringify(out), { headers: { 'cache-control': 'public, max-age=86400' } }));
-  return out;
+  if (!Object.keys(stops).length) throw new Error('iTranvías: catálogo vacío');
+  return { lines, stops, pos };
 }
 
 // ---------- Alexa: consulta por línea y/o parada ----------
@@ -1328,6 +1326,63 @@ function upstreamSlot() {
   return p;
 }
 
+// Presupuesto compartido entre isolates (D1), un poco por debajo de los límites de
+// iTranvías para no llegar nunca al 429: 4/min, 190/h, 1950/día. Si no queda cupo,
+// no se llama a iTranvías y quien llama sirve el último dato bueno.
+var BUDGET = [["m", 60e3, 4], ["h", 3600e3, 190], ["d", 86400e3, 1950]];
+
+async function budgetTake() {
+  if (!(await stateReady())) return true;
+  const now = Date.now();
+  const keys = BUDGET.map(([k, span]) => "budget:" + k + ":" + Math.floor(now / span));
+  try {
+    const rows = (await ENV.DB.prepare("SELECT k, v FROM state WHERE k IN (?, ?, ?)").bind(...keys).all()).results || [];
+    const used = Object.fromEntries(rows.map((r) => [r.k, Number(r.v) || 0]));
+    if (keys.some((k, i) => (used[k] || 0) >= BUDGET[i][2])) return false;
+    const up = "INSERT INTO state (k, v) VALUES (?, '1') ON CONFLICT(k) DO UPDATE SET v = CAST(v AS INTEGER) + 1";
+    const stmts = keys.map((k) => ENV.DB.prepare(up).bind(k));
+    // Limpieza de contadores viejos de vez en cuando
+    if (Math.random() < 0.05) {
+      stmts.push(ENV.DB.prepare("DELETE FROM state WHERE k LIKE 'budget:m:%' AND k <> ?").bind(keys[0]));
+      stmts.push(ENV.DB.prepare("DELETE FROM state WHERE k LIKE 'budget:h:%' AND k <> ?").bind(keys[1]));
+      stmts.push(ENV.DB.prepare("DELETE FROM state WHERE k LIKE 'budget:d:%' AND k <> ?").bind(keys[2]));
+    }
+    await ENV.DB.batch(stmts);
+    return true;
+  } catch (e) { return true; }
+}
+
+// Caché compartida genérica: memoria del isolate → tabla state de D1 → fn().
+// Si fn falla y hay una copia vieja en D1, se usa la vieja (mejor eso que nada).
+var sharedMem = new Map();
+async function sharedCache(key, ttl, fn) {
+  const now = Date.now();
+  const m = sharedMem.get(key);
+  if (m && now - m.at < ttl) return m.v;
+  let row = null;
+  if (await stateReady()) {
+    try {
+      const r = await ENV.DB.prepare("SELECT v FROM state WHERE k = ?").bind("c:" + key).first();
+      row = r ? JSON.parse(r.v) : null;
+    } catch (e) {}
+  }
+  if (row && now - row.at < ttl) { sharedMem.set(key, row); return row.v; }
+  try {
+    const v = await fn();
+    const d = { at: Date.now(), v };
+    sharedMem.set(key, d);
+    if (sharedMem.size > 200) sharedMem.delete(sharedMem.keys().next().value);
+    if (await stateReady()) {
+      try { await ENV.DB.prepare("INSERT OR REPLACE INTO state (k, v) VALUES (?, ?)").bind("c:" + key, JSON.stringify(d)).run(); } catch (e) {}
+    }
+    return v;
+  } catch (e) {
+    const old = (m && (!row || m.at >= row.at)) ? m : row;
+    if (old) return old.v;
+    throw e;
+  }
+}
+
 var stateOk = null;
 async function stateReady() {
   if (!ENV || !ENV.DB) return false;
@@ -1342,6 +1397,7 @@ async function upstreamJSON(url, opts) {
   if (Date.now() < breaker.until) {
     throw new Error("iTranvías en pausa " + Math.ceil((breaker.until - Date.now()) / 1000) + " s (429)");
   }
+  if (!(await budgetTake())) throw new Error("iTranvías: cupo agotado (presupuesto propio)");
   await upstreamSlot();
   if (Date.now() < breaker.until) throw new Error("iTranvías en pausa (429)");
   const t0 = Date.now();
