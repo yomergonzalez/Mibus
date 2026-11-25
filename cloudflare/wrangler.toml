@@ -2,3 +2,9 @@ name = "mibus"
 main = "worker.js"
 compatibility_date = "2026-11-01"
 workers_dev = true
+
+# Registro de peticiones de la skill de Alexa (depuración)
+[[d1_databases]]
+binding = "DB"
+database_name = "mibus-logs"
+database_id = "6206819f-e59e-4f24-93da-f92fb1925caf"

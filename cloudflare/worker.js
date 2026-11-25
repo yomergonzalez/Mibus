@@ -40,14 +40,20 @@ export default {
     }
 
     if (url.pathname === '/alexa' && req.method === 'POST') {
-      return alexa(req, env);
+      const body = await req.clone().json().catch(() => null);
+      ALEXA_TRACE = [];
+      const trace = ALEXA_TRACE;
+      const res = await alexa(req, env, 'alexa');
+      ALEXA_TRACE = null;
+      if (env && env.DB && ctx) ctx.waitUntil(logAlexa(env, body, res.clone(), trace));
+      return res;
     }
 
     // Prueba rápida sin Alexa: /alexa/test?intent=ConsultaIntent&linea=14&parada=...&hora=...
     if (url.pathname === '/alexa/test') {
       const slots = {};
       for (const k of ['linea', 'parada', 'numero', 'hora', 'dia']) if (url.searchParams.get(k)) slots[k] = url.searchParams.get(k);
-      return new Response(await runIntent(url.searchParams.get('intent'), slots), { headers: { 'content-type': 'text/plain; charset=utf-8' } });
+      return new Response(await runIntent(url.searchParams.get('intent'), slots, url.searchParams.get('src') || 'alexa'), { headers: { 'content-type': 'text/plain; charset=utf-8' } });
     }
 
     // ---------- MCP (Alexa+ add-on y cualquier cliente MCP) ----------
@@ -323,6 +329,7 @@ async function nextBuses(trip) {
     try {
       const r = await fetch(API + '?dato=' + s.id + '&func=0', { headers: UPSTREAM_HEADERS, cache: 'no-store' });
       const j = JSON.parse(await r.text());
+      traceUpstream(s.id, j);
       for (const l of (j.buses && j.buses.lineas) || []) {
         if (s.lines.indexOf(l.linea) < 0) continue;
         for (const b of l.buses || []) {
@@ -339,7 +346,7 @@ let NOW_MIN = 0;
 function at(m) { return 'a ' + say(fmt(NOW_MIN + m)); }
 function when(m) { return m <= 1 ? 'ahora mismo, está llegando' : at(m) + ', en ' + m + ' minutos'; }
 
-async function alexa(req, env) {
+async function alexa(req, env, src = 'alexa') {
   let body = {};
   try { body = await req.json(); } catch (e) { return new Response('bad request', { status: 400 }); }
   const appId = body.session && body.session.application && body.session.application.applicationId;
@@ -352,15 +359,19 @@ async function alexa(req, env) {
   if (intent === 'AMAZON.HelpIntent') return alexaSay('Puedes decir: cuándo pasa el bus, el bus a casa, cuándo pasa el 14, o qué buses pasan por Outeiro 126.', false);
 
   if (intent === 'LlegarIntent' || intent === 'SalirIntent') return alexaPlan(body.request.intent, intent === 'LlegarIntent' ? 'ida' : 'vuelta');
-  if (intent === 'PasaIntent') return alexaPasa(body.request.intent);
-  if (intent === 'ConsultaIntent') return alexaConsulta(body.request.intent, (body.session && body.session.attributes) || {});
-  return alexaCommute(intent === 'IdaIntent' ? 'ida' : intent === 'VueltaIntent' ? 'vuelta' : null);
+  if (intent === 'PasaIntent') return alexaPasa(body.request.intent, src);
+  if (intent === 'ConsultaIntent') return alexaConsulta(body.request.intent, (body.session && body.session.attributes) || {}, src);
+  return alexaCommute(intent === 'IdaIntent' ? 'ida' : intent === 'VueltaIntent' ? 'vuelta' : null, src);
 }
 
-// Respuesta por defecto: próximos buses del trayecto (ida antes de las 15:00, vuelta después).
-async function alexaCommute(trip) {
+// Trayecto por defecto. El Echo está en casa: desde Alexa siempre la ida (paradas de casa).
+// Desde el MCP (móvil, cualquier sitio): ida antes de las 15:00, vuelta después.
+function defaultTrip(src, min) { return src === 'alexa' ? 'ida' : min < 15 * 60 ? 'ida' : 'vuelta'; }
+
+// Respuesta por defecto: próximos buses del trayecto.
+async function alexaCommute(trip, src = 'alexa') {
   NOW_MIN = madridNow().min;
-  if (!trip) trip = NOW_MIN < 15 * 60 ? 'ida' : 'vuelta';
+  if (!trip) trip = defaultTrip(src, NOW_MIN);
   const buses = await nextBuses(trip);
   if (!buses.length) return alexaSay('Ahora mismo no tengo buses a los que te dé tiempo a llegar, o iTranvías no responde. Prueba en un momento.');
   const main = buses.filter((x) => x.main);
@@ -429,7 +440,7 @@ async function plan(trip, time, date) {
   const entries = PLAN[trip];
   const lines = [...new Set(entries.map((e) => e.line))];
   const deps = {};
-  await Promise.all(lines.map(async (l) => { deps[l] = await departures(l, date); }));
+  await Promise.all(lines.map(async (l) => { deps[l] = await pubDepartures(l, date); }));
   const opts = [];
   for (const e of entries) {
     for (const d of deps[e.line][e.dir] || []) {
@@ -481,13 +492,13 @@ async function alexaPlan(intent, trip) {
 }
 
 // "¿Qué bus pasa a las 9?" -> buses programados por tus paradas entre 10 min antes y 20 min después
-async function alexaPasa(intent) {
+async function alexaPasa(intent, src = 'alexa') {
   const now = madridNow();
   const t = parseHHMM(String(slot(intent, 'hora') || '').replace(/[^0-9:]/g, ''));
   if (t == null) return alexaSay('¿A qué hora? Por ejemplo: qué bus pasa a las nueve.', false);
   let date = slot(intent, 'dia') || now.date;
   if (!slot(intent, 'dia') && t < now.min - 30) { const d = new Date(now.date + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + 1); date = d.toISOString().slice(0, 10); }
-  const trip = t < 15 * 60 ? 'ida' : 'vuelta';
+  const trip = defaultTrip(src, t);
   const ymd = date.replace(/-/g, '');
   const seen = new Set(), parts = [];
   try {
@@ -495,7 +506,7 @@ async function alexaPasa(intent) {
       const k = e.line + '|' + e.stop;
       if (seen.has(k) || parts.length >= 3) continue;
       seen.add(k);
-      const dep = await departures(e.line, ymd);
+      const dep = await pubDepartures(e.line, ymd);
       const times = (dep[e.dir] || []).map((d) => d + e.off).filter((b) => b >= t - 10 && b <= t + 20).slice(0, 3);
       if (!times.length) continue;
       const list = times.map((b) => 'a ' + say(fmt(b)).replace(/ de la (tarde|noche|madrugada)$/, ''));
@@ -598,19 +609,19 @@ function seq(mins) {
   return t;
 }
 
-async function alexaConsulta(intent, attrs = {}) {
+async function alexaConsulta(intent, attrs = {}, src = 'alexa') {
   NOW_MIN = madridNow().min;
   let meta;
-  try { meta = await getMeta(); } catch (e) { return alexaSay('No he podido consultar iTranvías. Prueba en un momento.'); }
+  try { meta = await pubMeta(); } catch (e) { return alexaSay('No he podido consultar iTranvías. Prueba en un momento.'); }
   let lineSpoken = slot(intent, 'linea');
   const stopSpoken = slot(intent, 'parada'), num = slot(intent, 'numero');
   if (lineSpoken && GENERIC_LINE.test(norm(lineSpoken))) lineSpoken = null;
   // Respuesta de seguimiento ("por Cuatro Caminos") tras preguntar por una línea que no pasa por tus paradas.
   if (!lineSpoken && (stopSpoken || num) && attrs.linea) lineSpoken = attrs.linea;
-  if (!lineSpoken && !stopSpoken && !num) return alexaCommute(null);
+  if (!lineSpoken && !stopSpoken && !num) return alexaCommute(null, src);
   const lineId = lineSpoken ? findLine(meta, lineSpoken) : null;
   if (lineSpoken && !lineId) return alexaSay('No conozco la línea ' + lineSpoken + '. Dime el número, por ejemplo: cuándo pasa el 14.', false);
-  const trip = NOW_MIN < 15 * 60 ? 'ida' : 'vuelta';
+  const trip = defaultTrip(src, NOW_MIN);
   const mine = [...new Set(ALEXA_TRIPS[trip].map((s) => s.id).concat(ALEXA_TRIPS[trip === 'ida' ? 'vuelta' : 'ida'].map((s) => s.id)))];
 
   let stops = [];
@@ -628,6 +639,7 @@ async function alexaConsulta(intent, attrs = {}) {
     try {
       const r = await fetch(API + '?dato=' + sid + '&func=0', { headers: UPSTREAM_HEADERS, cache: 'no-store' });
       const j = JSON.parse(await r.text());
+      traceUpstream(sid, j);
       const items = [];
       for (const l of (j.buses && j.buses.lineas) || []) {
         if (lineId && l.linea !== lineId) continue;
@@ -652,11 +664,11 @@ async function alexaConsulta(intent, attrs = {}) {
 
 // ---------- Intents reutilizables (Alexa clásica, /alexa/test y MCP) ----------
 // Ejecuta la misma lógica que la skill y devuelve el texto que diría Alexa.
-async function runIntent(name, slots = {}) {
+async function runIntent(name, slots = {}, src = 'mcp') {
   const s = {};
   for (const k in slots) if (slots[k] != null && slots[k] !== '') s[k] = { value: String(slots[k]) };
   const body = { request: name ? { type: 'IntentRequest', intent: { name, slots: s } } : { type: 'LaunchRequest' } };
-  const r = await alexa(new Request('https://mibus.local/alexa', { method: 'POST', body: JSON.stringify(body) }), {});
+  const r = await alexa(new Request('https://mibus.local/alexa', { method: 'POST', body: JSON.stringify(body) }), {}, src);
   const j = await r.json();
   return (j.response && j.response.outputSpeech && j.response.outputSpeech.text) || '';
 }
@@ -1183,4 +1195,30 @@ async function mcpPublic(req, env, url) {
     default:
       return rpcError(id, -32601, "Method not found: " + msg.method);
   }
+}
+
+// =====================================================================
+// Registro de peticiones de Alexa en D1 (binding DB): qué intent llegó, con
+// qué slots, qué respondió la skill y qué devolvió iTranvías. Últimas 500.
+// =====================================================================
+var ALEXA_TRACE = null;
+function traceUpstream(stop, j) {
+  if (!ALEXA_TRACE) return;
+  try {
+    ALEXA_TRACE.push({ p: stop, l: ((j.buses && j.buses.lineas) || []).map((l) => [l.linea, (l.buses || []).map((b) => b.tiempo)]) });
+  } catch (e) {}
+}
+async function logAlexa(env, body, res, trace) {
+  try {
+    const out = await res.json().catch(() => ({}));
+    const rq = (body && body.request) || {};
+    const slots = {};
+    for (const [k, v] of Object.entries((rq.intent && rq.intent.slots) || {})) if (v && v.value) slots[k] = v.value;
+    const speech = (out.response && out.response.outputSpeech && out.response.outputSpeech.text) || null;
+    await env.DB.batch([
+      env.DB.prepare('INSERT INTO alexa_log (ts, req_type, intent, slots, speech, upstream) VALUES (?, ?, ?, ?, ?, ?)')
+        .bind(new Date().toISOString(), rq.type || null, (rq.intent && rq.intent.name) || null, JSON.stringify(slots), speech, JSON.stringify(trace || []).slice(0, 4000)),
+      env.DB.prepare('DELETE FROM alexa_log WHERE id <= (SELECT MAX(id) - 500 FROM alexa_log)')
+    ]);
+  } catch (e) {}
 }
