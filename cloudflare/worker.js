@@ -41,6 +41,17 @@ export default {
       return alexa(req, env);
     }
 
+    // Prueba rápida sin Alexa: /alexa/test?intent=ConsultaIntent&linea=14&parada=...&hora=...
+    if (url.pathname === '/alexa/test') {
+      const name = url.searchParams.get('intent');
+      const slots = {};
+      for (const k of ['linea', 'parada', 'numero', 'hora', 'dia']) if (url.searchParams.get(k)) slots[k] = { value: url.searchParams.get(k) };
+      const fake = new Request(url.origin + '/alexa', { method: 'POST', body: JSON.stringify({ request: name ? { type: 'IntentRequest', intent: { name, slots } } : { type: 'LaunchRequest' } }) });
+      const r = await alexa(fake, {});
+      const j = await r.json();
+      return new Response((j.response && j.response.outputSpeech && j.response.outputSpeech.text) || '', { headers: { 'content-type': 'text/plain; charset=utf-8' } });
+    }
+
     if (url.pathname === '/manifest.webmanifest') {
       return new Response(JSON.stringify({
         name: 'Mi bus Coruña', short_name: 'Mi bus', start_url: '/', display: 'standalone',
