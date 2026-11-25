@@ -1,6 +1,7 @@
-// Mi bus · A Coruña — Cloudflare Worker (proxy de iTranvías + app)
-// Sirve la app y hace de proxy a iTranvías (tiempo real de la Compañía de Tranvías).
-// Despliegue: Cloudflare → Workers & Pages → Create → Hello World → Edit code → pegar → Deploy.
+// Mi bus · A Coruña — Cloudflare Worker (proxy de iTranvías + app + skill de Alexa + servidor MCP)
+// Sirve la app, hace de proxy a iTranvías (tiempo real de la Compañía de Tranvías),
+// responde a la skill clásica de Alexa (/alexa) y expone un servidor MCP (/mcp) para Alexa+ y otros clientes.
+// Despliegue: push a main → GitHub Actions (wrangler).
 
 const API = 'https://itranvias.com/queryitr_v3.php';
 const UPSTREAM_HEADERS = {
@@ -43,14 +44,24 @@ export default {
 
     // Prueba rápida sin Alexa: /alexa/test?intent=ConsultaIntent&linea=14&parada=...&hora=...
     if (url.pathname === '/alexa/test') {
-      const name = url.searchParams.get('intent');
       const slots = {};
-      for (const k of ['linea', 'parada', 'numero', 'hora', 'dia']) if (url.searchParams.get(k)) slots[k] = { value: url.searchParams.get(k) };
-      const fake = new Request(url.origin + '/alexa', { method: 'POST', body: JSON.stringify({ request: name ? { type: 'IntentRequest', intent: { name, slots } } : { type: 'LaunchRequest' } }) });
-      const r = await alexa(fake, {});
-      const j = await r.json();
-      return new Response((j.response && j.response.outputSpeech && j.response.outputSpeech.text) || '', { headers: { 'content-type': 'text/plain; charset=utf-8' } });
+      for (const k of ['linea', 'parada', 'numero', 'hora', 'dia']) if (url.searchParams.get(k)) slots[k] = url.searchParams.get(k);
+      return new Response(await runIntent(url.searchParams.get('intent'), slots), { headers: { 'content-type': 'text/plain; charset=utf-8' } });
     }
+
+    // ---------- MCP (Alexa+ add-on y cualquier cliente MCP) ----------
+    if (url.pathname === '/mcp') return mcp(req, env, url);
+    if (url.pathname === '/.well-known/oauth-protected-resource' || url.pathname === '/.well-known/oauth-protected-resource/mcp') {
+      return json({ resource: url.origin + '/mcp', authorization_servers: [url.origin], scopes_supported: [MCP_SCOPE], bearer_methods_supported: ['header'], resource_name: 'Mi bus A Coruña' });
+    }
+    if (url.pathname === '/.well-known/oauth-authorization-server') {
+      return json({
+        issuer: url.origin, token_endpoint: url.origin + '/oauth/token',
+        grant_types_supported: ['client_credentials'], token_endpoint_auth_methods_supported: ['client_secret_basic', 'client_secret_post'],
+        scopes_supported: [MCP_SCOPE], response_types_supported: [], code_challenge_methods_supported: ['S256']
+      });
+    }
+    if (url.pathname === '/oauth/token') return oauthToken(req, env, url);
 
     if (url.pathname === '/manifest.webmanifest') {
       return new Response(JSON.stringify({
@@ -607,4 +618,233 @@ async function alexaConsulta(intent) {
   }
   parts.sort((a, b) => stops.indexOf(a.sid) - stops.indexOf(b.sid));
   return alexaSay(parts.map((p) => p.text).join(' '));
+}
+
+// ---------- Intents reutilizables (Alexa clásica, /alexa/test y MCP) ----------
+// Ejecuta la misma lógica que la skill y devuelve el texto que diría Alexa.
+async function runIntent(name, slots = {}) {
+  const s = {};
+  for (const k in slots) if (slots[k] != null && slots[k] !== '') s[k] = { value: String(slots[k]) };
+  const body = { request: name ? { type: 'IntentRequest', intent: { name, slots: s } } : { type: 'LaunchRequest' } };
+  const r = await alexa(new Request('https://mibus.local/alexa', { method: 'POST', body: JSON.stringify(body) }), {});
+  const j = await r.json();
+  return (j.response && j.response.outputSpeech && j.response.outputSpeech.text) || '';
+}
+
+// ---------- Servidor MCP (Streamable HTTP, sin estado, respuestas JSON) ----------
+// Alexa+ (MCP Toolkit), Claude u otro cliente MCP llaman a POST /mcp.
+// Autenticación de servicio (OAuth 2.1 client_credentials) si existen los secrets
+// MCP_CLIENT_ID y MCP_CLIENT_SECRET; sin ellos el endpoint queda abierto (los datos son públicos).
+const MCP_SCOPE = 'mcp:service';
+const MCP_VERSIONS = ['2025-11-25', '2025-06-18', '2025-03-26'];
+const HORA_RE = /^\d{1,2}(:\d{2})?$/;
+const FECHA_RE = /^\d{4}-\d{2}-\d{2}$/;
+const RO = { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: true };
+
+const MCP_TOOLS = [
+  {
+    name: 'proximos_buses',
+    title: 'Próximos buses de mi trayecto',
+    description: 'Live next buses for the user\'s daily commute in A Coruña (Spain), from iTranvías real-time data. ' +
+      'trayecto "ida" = from home to work (El Corte Inglés); "vuelta" = from work back home. If omitted, it picks ida before 15:00 and vuelta after (Europe/Madrid). ' +
+      'Only lists buses the user can still reach on foot. Answer in Spanish. Use for: "¿cuándo pasa mi bus?", "el bus al trabajo", "el bus a casa".',
+    inputSchema: { type: 'object', properties: { trayecto: { type: 'string', enum: ['ida', 'vuelta'], description: 'ida = casa → trabajo; vuelta = trabajo → casa' } }, additionalProperties: false },
+    annotations: RO,
+    run: (a) => runIntent(a.trayecto === 'ida' ? 'IdaIntent' : a.trayecto === 'vuelta' ? 'VueltaIntent' : null)
+  },
+  {
+    name: 'consultar_parada',
+    title: 'Consultar una línea o parada',
+    description: 'Live arrivals for any A Coruña city bus line and/or stop (iTranvías real time). ' +
+      'Give a line ("14", "12A"), a stop by street name ("Ronda de Outeiro 126", "corte inglés", "casa") or a stop number, or a combination. ' +
+      'With only a line, it checks the user\'s usual stops. Use for: "¿cuándo pasa el 14?", "¿qué buses pasan por Outeiro 126?".',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        linea: { type: 'string', description: 'Línea de bus, p. ej. "14" o "12A"' },
+        parada: { type: 'string', description: 'Nombre o calle de la parada, p. ej. "Ronda de Outeiro 126"' },
+        numero_parada: { type: 'integer', minimum: 1, description: 'Número de parada de iTranvías' }
+      },
+      additionalProperties: false
+    },
+    annotations: RO,
+    validate: (a) => (a.linea || a.parada || a.numero_parada) ? null : 'Indica una línea, una parada o un número de parada.',
+    run: (a) => runIntent('ConsultaIntent', { linea: a.linea, parada: a.parada, numero: a.numero_parada })
+  },
+  {
+    name: 'planificar_viaje',
+    title: 'Planificar el viaje para una hora',
+    description: 'Plans the commute with the scheduled timetable. trayecto "ida": which bus to take to ARRIVE at work by the given time. ' +
+      'trayecto "vuelta": best bus home when LEAVING work at the given time. hora in 24h HH:MM; fecha optional (YYYY-MM-DD, defaults to today or tomorrow if the time has passed). ' +
+      'Use for: "¿qué bus cojo para llegar a las 9?", "si salgo a las 18:30, ¿qué bus me llevo?".',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        trayecto: { type: 'string', enum: ['ida', 'vuelta'] },
+        hora: { type: 'string', pattern: '^\\d{1,2}(:\\d{2})?$', description: 'Hora en formato 24 h, p. ej. "09:00"' },
+        fecha: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$', description: 'Fecha YYYY-MM-DD (opcional)' }
+      },
+      required: ['trayecto', 'hora'],
+      additionalProperties: false
+    },
+    annotations: { ...RO, openWorldHint: true },
+    validate: (a) => !['ida', 'vuelta'].includes(a.trayecto) ? 'trayecto debe ser "ida" o "vuelta".' : !HORA_RE.test(a.hora || '') ? 'hora debe tener formato HH:MM.' : a.fecha && !FECHA_RE.test(a.fecha) ? 'fecha debe tener formato YYYY-MM-DD.' : null,
+    run: (a) => runIntent(a.trayecto === 'ida' ? 'LlegarIntent' : 'SalirIntent', { hora: a.hora, dia: a.fecha })
+  },
+  {
+    name: 'buses_a_una_hora',
+    title: 'Qué buses pasan a una hora',
+    description: 'Scheduled buses at the user\'s usual stops around a given time (10 minutes before to 20 minutes after). ' +
+      'hora in 24h HH:MM; fecha optional (YYYY-MM-DD). Use for: "¿qué bus pasa a las nueve?".',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        hora: { type: 'string', pattern: '^\\d{1,2}(:\\d{2})?$', description: 'Hora en formato 24 h' },
+        fecha: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$', description: 'Fecha YYYY-MM-DD (opcional)' }
+      },
+      required: ['hora'],
+      additionalProperties: false
+    },
+    annotations: RO,
+    validate: (a) => !HORA_RE.test(a.hora || '') ? 'hora debe tener formato HH:MM.' : a.fecha && !FECHA_RE.test(a.fecha) ? 'fecha debe tener formato YYYY-MM-DD.' : null,
+    run: (a) => runIntent('PasaIntent', { hora: a.hora, dia: a.fecha })
+  }
+];
+
+const MCP_CORS = {
+  'access-control-allow-origin': '*',
+  'access-control-allow-methods': 'POST, OPTIONS',
+  'access-control-allow-headers': 'authorization, content-type, mcp-protocol-version, mcp-session-id',
+  'access-control-expose-headers': 'mcp-session-id'
+};
+
+function rpc(id, result, status = 200) {
+  return new Response(JSON.stringify({ jsonrpc: '2.0', id, result }), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...MCP_CORS } });
+}
+function rpcError(id, code, message, status = 200) {
+  return new Response(JSON.stringify({ jsonrpc: '2.0', id, error: { code, message } }), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...MCP_CORS } });
+}
+
+function mcpAuthEnabled(env) { return !!(env && env.MCP_CLIENT_ID && env.MCP_CLIENT_SECRET); }
+
+async function mcp(req, env, url) {
+  if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: MCP_CORS });
+  // Sin stream SSE: este servidor solo responde a POST.
+  if (req.method !== 'POST') return new Response('Method Not Allowed', { status: 405, headers: { allow: 'POST, OPTIONS', ...MCP_CORS } });
+
+  if (mcpAuthEnabled(env)) {
+    const m = (req.headers.get('authorization') || '').match(/^Bearer\s+(\S+)$/i);
+    // 401 sin cabecera WWW-Authenticate (requisito de Alexa+).
+    if (!m || !(await verifyToken(m[1], env, url.origin))) {
+      return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401, headers: { 'content-type': 'application/json', ...MCP_CORS } });
+    }
+  }
+
+  let msg;
+  try { msg = await req.json(); } catch (e) { return rpcError(null, -32700, 'Parse error', 400); }
+  if (Array.isArray(msg) || !msg || msg.jsonrpc !== '2.0' || typeof msg.method !== 'string') {
+    // Las respuestas a peticiones del servidor (no hacemos ninguna) y los lotes no se admiten.
+    if (msg && !Array.isArray(msg) && msg.jsonrpc === '2.0' && msg.method === undefined) return new Response(null, { status: 202, headers: MCP_CORS });
+    return rpcError(null, -32600, 'Invalid Request', 400);
+  }
+  // Notificación (sin id): se acepta sin respuesta.
+  if (msg.id === undefined) return new Response(null, { status: 202, headers: MCP_CORS });
+
+  const id = msg.id, params = msg.params || {};
+  switch (msg.method) {
+    case 'initialize': {
+      const asked = params.protocolVersion;
+      return rpc(id, {
+        protocolVersion: MCP_VERSIONS.includes(asked) ? asked : MCP_VERSIONS[0],
+        capabilities: { tools: { listChanged: false } },
+        serverInfo: { name: 'mibus', title: 'Mi bus A Coruña', version: '1.0.0' },
+        instructions: 'Horarios en tiempo real de los buses urbanos de A Coruña (iTranvías) para los trayectos diarios del usuario: ida (casa → trabajo en El Corte Inglés) y vuelta. Las herramientas devuelven frases en español listas para decir en voz alta.'
+      });
+    }
+    case 'ping':
+      return rpc(id, {});
+    case 'tools/list':
+      return rpc(id, { tools: MCP_TOOLS.map(({ run, validate, ...t }) => t) });
+    case 'tools/call': {
+      const tool = MCP_TOOLS.find((t) => t.name === params.name);
+      if (!tool) return rpcError(id, -32602, 'Unknown tool: ' + params.name);
+      const args = params.arguments && typeof params.arguments === 'object' ? params.arguments : {};
+      const bad = tool.validate && tool.validate(args);
+      if (bad) return rpc(id, { content: [{ type: 'text', text: bad }], isError: true });
+      try {
+        const text = await tool.run(args);
+        return rpc(id, { content: [{ type: 'text', text: text || 'No tengo datos ahora mismo.' }], isError: false });
+      } catch (e) {
+        return rpc(id, { content: [{ type: 'text', text: 'No he podido consultar iTranvías. Prueba en un momento.' }], isError: true });
+      }
+    }
+    default:
+      return rpcError(id, -32601, 'Method not found: ' + msg.method);
+  }
+}
+
+// ---------- OAuth 2.1 client_credentials (nivel servicio, scope mcp:service) ----------
+const TOKEN_TTL = 3600;
+const enc = new TextEncoder();
+const b64url = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const b64urlText = (s) => b64url(enc.encode(s));
+const fromB64url = (s) => atob(s.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((s.length + 3) % 4));
+
+async function hmac(key, data) {
+  const k = await crypto.subtle.importKey('raw', enc.encode(key), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  return b64url(await crypto.subtle.sign('HMAC', k, enc.encode(data)));
+}
+function safeEqual(a, b) {
+  a = String(a); b = String(b);
+  let diff = a.length ^ b.length;
+  for (let i = 0; i < Math.max(a.length, b.length); i++) diff |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0);
+  return diff === 0;
+}
+function tokenError(error, status = 400) {
+  return new Response(JSON.stringify({ error }), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store', pragma: 'no-cache' } });
+}
+
+async function oauthToken(req, env, url) {
+  if (req.method !== 'POST') return new Response('Method Not Allowed', { status: 405, headers: { allow: 'POST' } });
+  if (url.searchParams.has('client_id') || url.searchParams.has('client_secret')) return tokenError('invalid_request');
+  if (!mcpAuthEnabled(env)) return tokenError('invalid_client', 401);
+
+  let p = {};
+  const ct = req.headers.get('content-type') || '';
+  try {
+    if (ct.includes('application/json')) p = await req.json();
+    else p = Object.fromEntries(new URLSearchParams(await req.text()));
+  } catch (e) { return tokenError('invalid_request'); }
+
+  if (p.grant_type !== 'client_credentials') return tokenError('unsupported_grant_type');
+
+  let id = p.client_id, secret = p.client_secret;
+  const basic = (req.headers.get('authorization') || '').match(/^Basic\s+(\S+)$/i);
+  if (basic) {
+    try {
+      const raw = atob(basic[1]), i = raw.indexOf(':');
+      id = decodeURIComponent(raw.slice(0, i)); secret = decodeURIComponent(raw.slice(i + 1));
+    } catch (e) { return tokenError('invalid_client', 401); }
+  }
+  if (!id || !secret || !safeEqual(id, env.MCP_CLIENT_ID) || !safeEqual(secret, env.MCP_CLIENT_SECRET)) return tokenError('invalid_client', 401);
+
+  if (p.scope && p.scope.split(' ').some((s) => s !== MCP_SCOPE)) return tokenError('invalid_scope');
+  if (p.resource && !String(p.resource).startsWith(url.origin)) return tokenError('invalid_target');
+
+  const now = Math.floor(Date.now() / 1000);
+  const payload = b64urlText(JSON.stringify({ iss: url.origin, aud: url.origin + '/mcp', sub: id, scope: MCP_SCOPE, iat: now, exp: now + TOKEN_TTL }));
+  const token = payload + '.' + (await hmac(env.MCP_CLIENT_SECRET, payload));
+  // Sin refresh_token en client_credentials.
+  return new Response(JSON.stringify({ access_token: token, token_type: 'Bearer', expires_in: TOKEN_TTL, scope: MCP_SCOPE }),
+    { headers: { 'content-type': 'application/json', 'cache-control': 'no-store', pragma: 'no-cache' } });
+}
+
+async function verifyToken(token, env, origin) {
+  const [payload, sig] = String(token).split('.');
+  if (!payload || !sig) return false;
+  if (!safeEqual(sig, await hmac(env.MCP_CLIENT_SECRET, payload))) return false;
+  try {
+    const c = JSON.parse(fromB64url(payload));
+    return c.aud === origin + '/mcp' && c.scope === MCP_SCOPE && c.exp > Math.floor(Date.now() / 1000);
+  } catch (e) { return false; }
 }
