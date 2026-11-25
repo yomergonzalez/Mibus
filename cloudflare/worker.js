@@ -67,7 +67,7 @@ export default {
 
 function json(obj, status = 200, cache = 'no-store') {
   return new Response(JSON.stringify(obj), {
-    status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': cache }
+    status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': cache, 'access-control-allow-origin': '*' }
   });
 }
 
