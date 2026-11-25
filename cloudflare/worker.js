@@ -1,4 +1,4 @@
-// Mi bus · A Coruña — Cloudflare Worker
+// Mi bus · A Coruña — Cloudflare Worker (proxy de iTranvías + app)
 // Sirve la app y hace de proxy a iTranvías (tiempo real de la Compañía de Tranvías).
 // Despliegue: Cloudflare → Workers & Pages → Create → Hello World → Edit code → pegar → Deploy.
 
