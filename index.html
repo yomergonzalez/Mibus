@@ -235,7 +235,7 @@ function renderList(allStops) {
   for (const s of stops) {
     const d = data[s.id];
     if (!d) { pending = true; continue; }
-    if (d.err) errs.push(stopName(s.id));
+    if (d.err && (!(d.lineas || []).length || Date.now() - d.at > 120000)) errs.push(stopName(s.id));
     const el = (Date.now() - d.at) / 60000;
     for (const l of d.lineas || []) {
       const fav = !s.lines || s.lines.indexOf(l.linea) >= 0;
