@@ -179,7 +179,7 @@ function render() {
       const buses = [];
       for (const l of d.lineas || []) {
         if (s.lines && s.lines.indexOf(l.linea) < 0) continue;
-        for (const b of l.buses || []) buses.push({ linea: l.linea, t: Number(b.tiempo), dist: Number(b.distancia) });
+        for (const b of l.buses || []) { const t = mins(b.tiempo); if (t - elapsed >= -1) buses.push({ linea: l.linea, t: t, dist: metres(b.distancia) }); }
       }
       buses.sort((a, b) => a.t - b.t);
       rows = buses.slice(0, 4).map((b) => {
@@ -218,8 +218,9 @@ function renderList(allStops) {
     for (const l of d.lineas || []) {
       if (s.lines && s.lines.indexOf(l.linea) < 0) continue;
       for (const b of l.buses || []) {
-        const t = Number(b.tiempo);
-        all.push({ linea: l.linea, left: Math.max(0, Math.round(t - el)), at: d.at + t * 60000, dist: Number(b.distancia), stop: s.id });
+        const t = mins(b.tiempo);
+        if (t - el < -1) continue;
+        all.push({ linea: l.linea, left: Math.max(0, Math.round(t - el)), at: d.at + t * 60000, dist: metres(b.distancia), stop: s.id });
       }
     }
   }
@@ -247,6 +248,8 @@ function renderList(allStops) {
     (chips ? '<div class="sub"></div>' : '<div class="sub">' + stops.map((s) => esc(stopName(s.id))).join(' · ') + '</div>') + note + rows + '</section>';
 }
 
+function mins(v) { if (String(v).indexOf('<') >= 0) return 0; const n = parseFloat(String(v == null ? '' : v).replace(',', '.').replace(/[^0-9.]/g, '')); return isFinite(n) ? n : 0; }
+function metres(v) { const n = parseFloat(String(v == null ? '' : v).replace(/[^0-9.]/g, '')); return isFinite(n) ? n : 0; }
 function fmtKm(d) { return d >= 1000 ? (d / 1000).toLocaleString('es-ES', { maximumFractionDigits: 1 }) + ' km' : d + ' m'; }
 function posOf(id) { return (meta.pos && meta.pos[id]) || FALL_POS[id] || null; }
 function centre(list) {
