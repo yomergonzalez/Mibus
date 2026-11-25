@@ -11,39 +11,48 @@
 <link rel="apple-touch-icon" href="icon.svg">
 <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
-:root{color-scheme:light dark;--red:#c8102e;--bg:light-dark(#f4f2ef,#121214);--card:light-dark(#fff,#1d1d21);--ink:light-dark(#141414,#f2f2f2);--mute:light-dark(#6b6b6b,#a3a3a8);--line:light-dark(#e6e3df,#2c2c31)}
+:root{color-scheme:light dark;--red:#c8102e;--bg:light-dark(#f2f2f5,#0f0f12);--card:light-dark(#fff,#1b1b20);--ink:light-dark(#111114,#f3f3f5);--mute:light-dark(#6e6e76,#9d9da6);--line:light-dark(#ececf0,#26262c);--soft:light-dark(#fbeef0,#2a1418)}
 *{box-sizing:border-box;min-width:0}
 body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 Figtree,system-ui,sans-serif;-webkit-tap-highlight-color:transparent}
-header{background:var(--red);color:#fff;padding:max(18px,env(safe-area-inset-top)) 18px 16px}
+header{background:var(--red);color:#fff;padding:max(12px,env(safe-area-inset-top)) 14px 10px}
 .top{display:flex;align-items:center;justify-content:space-between;gap:12px;max-width:640px;margin:0 auto}
-h1{font-size:30px;line-height:1.05;margin:0;font-weight:800}
+h1{font-size:22px;line-height:1.05;margin:0;font-weight:800}
 .clock{font-size:15px;opacity:.9;font-variant-numeric:tabular-nums}
-.seg{display:grid;grid-template-columns:1fr 1fr;gap:4px;background:rgba(0,0,0,.18);border-radius:14px;padding:4px;max-width:640px;margin:14px auto 0}
-.seg button{border:0;border-radius:10px;min-height:44px;font:700 16px Figtree,system-ui,sans-serif;color:#fff;background:transparent}
+.seg{display:grid;grid-template-columns:1fr 1fr;gap:3px;background:rgba(0,0,0,.18);border-radius:12px;padding:3px;max-width:640px;margin:10px auto 0}
+.seg button{border:0;border-radius:9px;min-height:38px;font:700 15px Figtree,system-ui,sans-serif;color:#fff;background:transparent}
 .seg button[aria-pressed=true]{background:#fff;color:var(--red)}
-.status{display:flex;align-items:center;justify-content:space-between;gap:10px;max-width:640px;margin:10px auto 0;font-size:14px;opacity:.92}
-.status button{border:1.5px solid rgba(255,255,255,.7);background:transparent;color:#fff;border-radius:999px;min-height:36px;padding:0 14px;font:700 14px Figtree,system-ui,sans-serif}
-main{max-width:640px;margin:0 auto;padding:16px 14px 24px;display:grid;gap:14px}
-.card{background:var(--card);border-radius:18px;padding:14px 16px 6px;border:1px solid var(--line)}
-.card h2{font-size:18px;margin:0;line-height:1.2}
-.sub{color:var(--mute);font-size:13px;margin:2px 0 8px}
-.row{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--line)}
-.chip{min-width:48px;height:34px;padding:0 8px;border-radius:9px;display:grid;place-items:center;color:#fff;font-weight:800;font-size:16px}
-.min{font-size:30px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums;white-space:nowrap}
-.min small{font-size:15px;font-weight:700;margin-left:3px}
+.status{display:flex;align-items:center;justify-content:space-between;gap:10px;max-width:640px;margin:8px auto 0;font-size:12px;opacity:.92}
+.status button{border:1.5px solid rgba(255,255,255,.7);background:transparent;color:#fff;border-radius:999px;min-height:30px;padding:0 12px;font:700 13px Figtree,system-ui,sans-serif}
+main{max-width:640px;margin:0 auto;padding:10px 10px 14px;display:grid;gap:10px}
+.card{background:var(--card);border-radius:18px;padding:12px 14px 4px;box-shadow:0 1px 2px rgba(0,0,0,.05),0 6px 20px rgba(0,0,0,.05)}
+.card h2{font-size:15px;margin:0;line-height:1.2}
+.sub{color:var(--mute);font-size:12px;margin:2px 0 6px}
+.row{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:10px;padding:7px 0;border-top:1px solid var(--line)}
+.chip{min-width:40px;height:28px;padding:0 6px;border-radius:7px;display:grid;place-items:center;color:#fff;font-weight:800;font-size:14px}
+.min{font-size:20px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums;white-space:nowrap}
+.min small{font-size:12px;font-weight:700;margin-left:2px}
 .min.now{color:var(--red)}
+.mid{min-width:0}
+.hero{background:var(--card);border-radius:20px;padding:14px 16px;display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:center;box-shadow:0 1px 2px rgba(0,0,0,.05),0 6px 20px rgba(0,0,0,.06);border:2px solid var(--red)}
+.hero .lbl{font-size:12px;font-weight:700;color:var(--red);letter-spacing:.01em;margin-bottom:2px}
+.hero .chip{min-width:52px;height:40px;font-size:19px;border-radius:10px}
+.hero .big{font-size:36px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums;white-space:nowrap}
+.hero .big small{font-size:15px;margin-left:3px}
+.hero .big.now{color:var(--red);font-size:28px}
+.hero .at b{font-size:20px}
+.chip{box-shadow:inset 0 -2px 0 rgba(0,0,0,.15)}.stp{font-size:12px;color:var(--mute);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .at{text-align:right;white-space:nowrap}
-.at b{display:block;font-size:20px;font-variant-numeric:tabular-nums}
-.at span{color:var(--mute);font-size:13px}
-.empty{color:var(--mute);padding:12px 0;border-top:1px solid var(--line)}
+.at b{display:block;font-size:15px;font-variant-numeric:tabular-nums}
+.at span{color:var(--mute);font-size:11px}
+.empty{color:var(--mute);padding:10px 0;border-top:1px solid var(--line);font-size:14px}
 .err{color:var(--red);font-size:14px;padding:6px 0}
 .edit{display:none;border-top:1px solid var(--line);padding:10px 0;gap:8px;flex-wrap:wrap;align-items:center}
 body.editing .edit{display:flex}
 .tg{border:1.5px solid var(--line);background:transparent;color:var(--ink);border-radius:999px;min-height:40px;padding:0 14px;font:700 14px Figtree,system-ui,sans-serif}
 .tg[aria-pressed=true]{background:var(--ink);color:var(--card);border-color:var(--ink)}
 .tg.rm{color:var(--red);border-color:var(--red);margin-left:auto}
-.tools{max-width:640px;margin:0 auto;padding:0 14px 30px;display:grid;gap:10px}
-.tools>button{min-height:48px;border-radius:14px;border:1.5px solid var(--line);background:var(--card);color:var(--ink);font:700 16px Figtree,system-ui,sans-serif}
+.tools{max-width:640px;margin:0 auto;padding:0 10px 20px;display:grid;gap:10px}
+.tools>button{min-height:42px;border-radius:14px;border:1.5px solid var(--line);background:var(--card);color:var(--ink);font:700 16px Figtree,system-ui,sans-serif}
 .add{display:none;gap:8px}
 body.editing .add{display:grid}
 .add input{min-height:48px;border-radius:12px;border:1.5px solid var(--line);background:var(--card);color:var(--ink);font:16px Figtree,system-ui,sans-serif;padding:0 14px}
@@ -108,16 +117,16 @@ function getStop(id) {
   });
 }
 function getMeta() {
-  try { const c = JSON.parse(localStorage.getItem("mibus-meta")); if (c && Date.now() - c.t < 864e5) return Promise.resolve(c.m); } catch (e) {}
+  try { const c = JSON.parse(localStorage.getItem("mibus-meta2")); if (c && Date.now() - c.t < 864e5) return Promise.resolve(c.m); } catch (e) {}
   return getJSON(API + "?dato=20160101T000000_gl_0_20160101T000000&func=7", "/api/meta").then((j) => {
     let m = j;
     if (!j.lines) {
       const a = (j.iTranvias && j.iTranvias.actualizacion) || {};
-      m = { lines: {}, stops: {} };
+      m = { lines: {}, stops: {}, pos: {} };
       for (const l of a.lineas || []) { let c = String(l.color || "").trim(); if (c && c[0] !== "#") c = "#" + c; m.lines[l.id] = { n: l.lin_comer, c: c }; }
-      for (const p of a.paradas || []) m.stops[p.id] = p.nombre;
+      for (const p of a.paradas || []) { m.stops[p.id] = p.nombre; if (p.posy && p.posx) m.pos[p.id] = [Number(p.posy), Number(p.posx)]; }
     }
-    try { localStorage.setItem("mibus-meta", JSON.stringify({ t: Date.now(), m: m })); } catch (e) {}
+    try { localStorage.setItem("mibus-meta2", JSON.stringify({ t: Date.now(), m: m })); } catch (e) {}
     return m;
   });
 }
@@ -127,7 +136,9 @@ const DEF = {
 };
 const FALL_STOPS = { 50: 'Rda. de Nelle, 109', 94: 'Rda. de Outeiro, 249', 40: 'Av. de Oza, 7', 269: 'Rda. de Outeiro, Pérez Ardá', 120: 'Rda. de Outeiro, 126' };
 const FALL_LINES = { 1200: { n: '12', c: '#019f02' }, 1400: { n: '14' }, 1500: { n: '12A', c: '#4db94c' }, 2000: { n: '20' } };
-let meta = { lines: {}, stops: {} };
+const FALL_POS = { 50: [43.362445, -8.416768], 94: [43.361055, -8.421567], 40: [43.356505, -8.403273], 269: [43.35168, -8.404437], 120: [43.354375, -8.410077] };
+let meta = { lines: {}, stops: {}, pos: {} };
+let manual = false, byLoc = false, hiddenAt = 0;
 let cfg = load();
 let tab = new Date().getHours() < 15 ? 'ida' : 'vuelta';
 const data = {};
@@ -155,6 +166,7 @@ function render() {
   $('t-vuelta').setAttribute('aria-pressed', tab === 'vuelta');
   const stops = cfg[tab];
   if (!stops.length) { $('list').innerHTML = '<div class="card"><p class="sub">No hay paradas. Pulsa «Editar paradas» para añadir una.</p></div>'; return; }
+  if (!document.body.classList.contains('editing')) { renderList(stops); return; }
   $('list').innerHTML = stops.map((s, i) => {
     const d = data[s.id];
     let rows = '';
@@ -187,7 +199,69 @@ function render() {
   }).join('');
 }
 
-let busy = false;
+function renderList(stops) {
+  const all = [], errs = [];
+  let pending = false;
+  for (const s of stops) {
+    const d = data[s.id];
+    if (!d) { pending = true; continue; }
+    if (d.err) errs.push(stopName(s.id));
+    const el = (Date.now() - d.at) / 60000;
+    for (const l of d.lineas || []) {
+      if (s.lines && s.lines.indexOf(l.linea) < 0) continue;
+      for (const b of l.buses || []) {
+        const t = Number(b.tiempo);
+        all.push({ linea: l.linea, left: Math.max(0, Math.round(t - el)), at: d.at + t * 60000, dist: Number(b.distancia), stop: s.id });
+      }
+    }
+  }
+  all.sort((a, b) => a.left - b.left || a.at - b.at);
+  const first = all[0];
+  let hero = '';
+  if (first) {
+    const li = lineInfo(first.linea);
+    hero = '<section class="hero"><div class="chip" style="background:' + li.c + '">' + esc(li.n) + '</div><div class="mid"><div class="lbl">Próximo bus</div>' +
+      (first.left <= 1 ? '<div class="big now">Llegando</div>' : '<div class="big">' + first.left + '<small>min</small></div>') +
+      '<div class="stp">' + esc(stopName(first.stop)) + '</div></div><div class="at"><b>' + hhmm(first.at) + '</b><span>a ' + esc(fmtKm(first.dist)) + '</span></div></section>';
+  }
+  let rows = all.slice(1, 8).map((b) => {
+    const li = lineInfo(b.linea);
+    const km = fmtKm(b.dist);
+    return '<div class="row"><div class="chip" style="background:' + li.c + '">' + esc(li.n) + '</div>' +
+      '<div class="mid">' + (b.left <= 1 ? '<div class="min now">Llegando</div>' : '<div class="min">' + b.left + '<small>min</small></div>') +
+      '<div class="stp">' + esc(stopName(b.stop)) + '</div></div>' +
+      '<div class="at"><b>' + hhmm(b.at) + '</b><span>a ' + esc(km) + '</span></div></div>';
+  }).join('');
+  if (!rows && first) rows = '<div class="empty">No hay más buses próximos.</div>';
+  if (!rows) rows = '<div class="empty">' + (pending ? 'Consultando…' : (errs.length === stops.length ? 'No se pudo conectar con iTranvías. Pulsa Actualizar.' : 'Sin buses próximos ahora mismo.')) + '</div>';
+  const note = errs.length && errs.length < stops.length ? '<div class="err">Sin datos ahora de: ' + errs.map(esc).join(', ') + '</div>' : '';
+  $('list').innerHTML = hero + '<section class="card"><h2>' + (first ? 'Después' : (tab === 'ida' ? 'Buses al trabajo' : 'Buses a casa')) + '</h2>' +
+    '<div class="sub">' + stops.map((s) => esc(stopName(s.id))).join(' · ') + '</div>' + note + rows + '</section>';
+}
+
+function fmtKm(d) { return d >= 1000 ? (d / 1000).toLocaleString('es-ES', { maximumFractionDigits: 1 }) + ' km' : d + ' m'; }
+function posOf(id) { return (meta.pos && meta.pos[id]) || FALL_POS[id] || null; }
+function centre(list) {
+  const pts = list.map((s) => posOf(s.id)).filter(Boolean);
+  if (!pts.length) return null;
+  return [pts.reduce((a, p) => a + p[0], 0) / pts.length, pts.reduce((a, p) => a + p[1], 0) / pts.length];
+}
+function km(a, b) { const dx = (a[1] - b[1]) * 111.32 * Math.cos(a[0] * Math.PI / 180), dy = (a[0] - b[0]) * 110.57; return Math.sqrt(dx * dx + dy * dy); }
+function autoTab() {
+  if (manual || !navigator.geolocation) return;
+  try {
+    navigator.geolocation.getCurrentPosition((p) => {
+      if (manual) return;
+      const me = [p.coords.latitude, p.coords.longitude], a = centre(cfg.ida), b = centre(cfg.vuelta);
+      if (!a || !b) return;
+      const t = km(me, a) <= km(me, b) ? 'ida' : 'vuelta';
+      byLoc = true;
+      if (t !== tab) { tab = t; render(); refresh(); } else tick();
+    }, () => {}, { maximumAge: 300000, timeout: 10000, enableHighAccuracy: false });
+  } catch (e) {}
+}
+
+let busy = false, again = false;
 function saveLast() { try { localStorage.setItem("mibus-last", JSON.stringify(data)); } catch (e) {} }
 try { const l = JSON.parse(localStorage.getItem("mibus-last")) || {}; for (const k in l) if (Date.now() - l[k].at < 15 * 60000) data[k] = { at: l[k].at, lineas: l[k].lineas }; } catch (e) {}
 async function loadStop(id) {
@@ -195,7 +269,8 @@ async function loadStop(id) {
   catch (e) { data[id] = Object.assign({ at: Date.now(), lineas: [] }, data[id], { err: true }); return false; }
 }
 async function refresh() {
-  if (busy) return; busy = true;
+  if (busy) { again = true; return; }
+  busy = true;
   const stops = cfg[tab];
   $('upd').textContent = 'Actualizando…';
   const ok = await Promise.all(stops.map((s) => loadStop(s.id).then((r) => { render(); return r; })));
@@ -206,20 +281,21 @@ async function refresh() {
   saveLast();
   tick();
   render();
+  if (again) { again = false; refresh(); }
 }
 
 function tick() {
   $('clock').textContent = hhmm(Date.now());
   if (lastAt) {
     const s = Math.round((Date.now() - lastAt) / 1000);
-    $('upd').textContent = 'Actualizado ' + (s < 5 ? 'ahora' : 'hace ' + s + ' s');
+    $('upd').textContent = 'Actualizado ' + (s < 5 ? 'ahora' : 'hace ' + s + ' s') + (byLoc && !manual ? ' · según tu ubicación' : '');
   }
 }
 
-$('t-ida').onclick = () => { tab = 'ida'; render(); refresh(); };
-$('t-vuelta').onclick = () => { tab = 'vuelta'; render(); refresh(); };
+$('t-ida').onclick = () => { manual = true; tab = 'ida'; render(); refresh(); };
+$('t-vuelta').onclick = () => { manual = true; tab = 'vuelta'; render(); refresh(); };
 $('refresh').onclick = refresh;
-$('editbtn').onclick = () => { const on = document.body.classList.toggle('editing'); $('editbtn').textContent = on ? 'Listo' : 'Editar paradas'; };
+$('editbtn').onclick = () => { const on = document.body.classList.toggle('editing'); $('editbtn').textContent = on ? 'Listo' : 'Editar paradas'; render(); };
 $('reset').onclick = () => { cfg = JSON.parse(JSON.stringify(DEF)); save(); render(); refresh(); };
 $('list').onclick = (e) => {
   const b = e.target.closest('button'); if (!b) return;
@@ -245,9 +321,14 @@ $('res').onclick = (e) => {
   cfg[tab].push({ id: Number(b.dataset.add), lines: null }); save();
   $('q').value = ''; $('res').innerHTML = ''; render(); refresh();
 };
-document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { hiddenAt = Date.now(); return; }
+  if (hiddenAt && Date.now() - hiddenAt > 5 * 60000) { manual = false; autoTab(); }
+  refresh();
+});
 
 render();
+autoTab();
 refresh().then(() => getMeta().then((m) => { meta = m || meta; render(); }).catch(() => {}));
 setInterval(refresh, 30000);
 setInterval(() => { tick(); }, 1000);

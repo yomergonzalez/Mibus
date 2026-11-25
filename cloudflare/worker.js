@@ -27,21 +27,21 @@ export default {
 
     if (url.pathname === '/api/meta') {
       const cache = caches.default;
-      const key = new Request(url.origin + '/api/meta?v=1');
+      const key = new Request(url.origin + '/api/meta?v=2');
       const hit = await cache.match(key);
       if (hit) return hit;
       try {
         const r = await fetch(API + '?dato=20160101T000000_gl_0_20160101T000000&func=7', { headers: UPSTREAM_HEADERS });
         const j = JSON.parse(await r.text());
         const a = (j.iTranvias && j.iTranvias.actualizacion) || {};
-        const lines = {}, stops = {};
+        const lines = {}, stops = {}, pos = {};
         for (const l of a.lineas || []) {
           let c = String(l.color || '').trim();
           if (c && c[0] !== '#') c = '#' + c;
           lines[l.id] = { n: l.lin_comer, c: c, o: l.nombre_orig, d: l.nombre_dest };
         }
-        for (const p of a.paradas || []) stops[p.id] = p.nombre;
-        const res = json({ lines, stops }, 200, 'public, max-age=86400');
+        for (const p of a.paradas || []) { stops[p.id] = p.nombre; if (p.posy && p.posx) pos[p.id] = [Number(p.posy), Number(p.posx)]; }
+        const res = json({ lines, stops, pos }, 200, 'public, max-age=86400');
         ctx.waitUntil(cache.put(key, res.clone()));
         return res;
       } catch (e) {
