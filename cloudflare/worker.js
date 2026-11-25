@@ -348,6 +348,7 @@ async function alexa(req, env) {
   if (intent === 'AMAZON.HelpIntent') return alexaSay('Puedes decir: cuándo pasa el bus, el bus al trabajo, o el bus a casa.', false);
 
   if (intent === 'LlegarIntent' || intent === 'SalirIntent') return alexaPlan(body.request.intent, intent === 'LlegarIntent' ? 'ida' : 'vuelta');
+  if (intent === 'PasaIntent') return alexaPasa(body.request.intent);
   const hour = Number(new Intl.DateTimeFormat('es-ES', { timeZone: 'Europe/Madrid', hour: 'numeric', hourCycle: 'h23' }).format(new Date()));
   let trip = hour < 15 ? 'ida' : 'vuelta';
   if (intent === 'IdaIntent') trip = 'ida';
@@ -359,13 +360,13 @@ async function alexa(req, env) {
   const main = buses.filter((x) => x.main);
   if (main.length) {
     const m = main[0], alt = buses.find((x) => !x.main && x.leave < m.leave);
-    let t = 'El próximo ' + m.line + ' en ' + m.stop + ' pasa ' + when(m.min) + '. ' + leave(m.leave);
+    let t = 'El próximo ' + m.line + ' en ' + m.stop + ' pasa ' + when(m.min) + '.';
     if (main[1]) t += ' El siguiente pasa ' + at(main[1].min) + '.';
     if (alt) t += ' Si quieres algo antes, el ' + alt.line + ' en ' + alt.stop + ' pasa ' + at(alt.min) + '.';
     return alexaSay(t);
   }
   const [a, b, c] = buses;
-  let text = 'El próximo que te da tiempo es el ' + a.line + ' en ' + a.stop + ', ' + when(a.min) + '. ' + leave(a.leave).replace('de casa', 'del trabajo');
+  let text = 'El próximo que te da tiempo es el ' + a.line + ' en ' + a.stop + ', ' + when(a.min) + '.';
   if (b) text += ' Después, el ' + b.line + ' en ' + b.stop + ', ' + at(b.min) + '.';
   if (c) text += ' Y el ' + c.line + ' en ' + c.stop + ', ' + at(c.min) + '.';
   return alexaSay(text);
@@ -463,7 +464,7 @@ async function alexaPlan(intent, trip) {
   const best = p.options.find((o) => o.main) || p.options[0];
   if (trip === 'ida') {
     const prev = p.options.find((o) => o.lineId === best.lineId && o.stop === best.stop && o.bus < best.bus);
-    let text = 'Para llegar a ' + say(fmt(t)) + ', coge el ' + best.line + ' en ' + best.stop + ' a ' + say(best.bus) + '. Sal de casa a ' + say(best.leave) + ' y llegas sobre ' + say(best.arrive) + '.';
+    let text = 'Para llegar a ' + say(fmt(t)) + ', coge el ' + best.line + ' en ' + best.stop + ' a ' + say(best.bus) + '; llegas sobre ' + say(best.arrive) + '.';
     if (prev) text += ' Si quieres ir con margen, el anterior pasa a ' + say(prev.bus) + '.';
     return alexaSay(text + ' Es el horario programado; puede variar con el tráfico.');
   }
@@ -471,4 +472,31 @@ async function alexaPlan(intent, trip) {
   let text = 'Si sales a ' + say(fmt(t)) + ', lo mejor es el ' + a.line + ' en ' + a.stop + ' a ' + say(a.bus) + '; llegas a casa sobre ' + say(a.arrive) + '.';
   if (b) text += ' Si no, el ' + b.line + ' en ' + b.stop + ' a ' + say(b.bus) + '.';
   return alexaSay(text + ' Es el horario programado.');
+}
+
+// "¿Qué bus pasa a las 9?" -> buses programados por tus paradas entre 10 min antes y 20 min después
+async function alexaPasa(intent) {
+  const now = madridNow();
+  const t = parseHHMM(String(slot(intent, 'hora') || '').replace(/[^0-9:]/g, ''));
+  if (t == null) return alexaSay('¿A qué hora? Por ejemplo: qué bus pasa a las nueve.', false);
+  let date = slot(intent, 'dia') || now.date;
+  if (!slot(intent, 'dia') && t < now.min - 30) { const d = new Date(now.date + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + 1); date = d.toISOString().slice(0, 10); }
+  const trip = t < 15 * 60 ? 'ida' : 'vuelta';
+  const ymd = date.replace(/-/g, '');
+  const seen = new Set(), parts = [];
+  try {
+    for (const e of PLAN[trip]) {
+      const k = e.line + '|' + e.stop;
+      if (seen.has(k) || parts.length >= 3) continue;
+      seen.add(k);
+      const dep = await departures(e.line, ymd);
+      const times = (dep[e.dir] || []).map((d) => d + e.off).filter((b) => b >= t - 10 && b <= t + 20).slice(0, 3);
+      if (!times.length) continue;
+      const list = times.map((b) => 'a ' + say(fmt(b)).replace(/ de la (tarde|noche|madrugada)$/, ''));
+      const joined = list.length > 1 ? list.slice(0, -1).join(', ') + ' y ' + list[list.length - 1] : list[0];
+      parts.push('el ' + (LINE_NAMES[e.line] || e.line) + ' por ' + e.stop + ' ' + joined);
+    }
+  } catch (e) { return alexaSay('No he podido consultar los horarios de iTranvías. Prueba en un momento.'); }
+  if (!parts.length) return alexaSay('No encuentro buses en tus paradas sobre ' + say(fmt(t)) + '.');
+  return alexaSay('Sobre ' + say(fmt(t)) + ' pasan ' + parts.join('; ') + '. Es el horario programado.');
 }

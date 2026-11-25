@@ -107,6 +107,31 @@
             "salgo {hora}",
             "si salgo {hora} {dia}"
           ]
+        },
+        {
+          "name": "PasaIntent",
+          "slots": [
+            {
+              "name": "hora",
+              "type": "AMAZON.TIME"
+            },
+            {
+              "name": "dia",
+              "type": "AMAZON.DATE"
+            }
+          ],
+          "samples": [
+            "qué bus pasa a las {hora}",
+            "qué bus pasa {hora}",
+            "qué buses pasan a las {hora}",
+            "qué buses pasan {hora}",
+            "qué bus pasa a las {hora} {dia}",
+            "qué bus pasa {dia} a las {hora}",
+            "qué bus hay a las {hora}",
+            "qué bus hay {hora}",
+            "el bus de las {hora}",
+            "qué pasa a las {hora}"
+          ]
         }
       ],
       "types": []
