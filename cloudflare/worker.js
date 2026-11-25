@@ -13,7 +13,30 @@ const UPSTREAM_HEADERS = {
 
 export default {
   async fetch(req, env, ctx) {
+    const res = await handle(req, env, ctx);
+    if (UPSTREAM_ERR.length && env && env.DB && ctx) {
+      const errs = UPSTREAM_ERR.splice(0);
+      ctx.waitUntil(logUpstream(env, new URL(req.url).pathname, errs));
+    }
+    return res;
+  }
+};
+
+async function handle(req, env, ctx) {
     const url = new URL(req.url);
+
+    // Diagnóstico: qué devuelve iTranvías a este Worker, sin filtrar. /debug/upstream?id=40
+    if (url.pathname === '/debug/upstream') {
+      const id = parseInt(url.searchParams.get('id'), 10) || 40;
+      const t0 = Date.now();
+      try {
+        const r = await fetch(API + '?dato=' + id + '&func=0', { headers: UPSTREAM_HEADERS, cache: 'no-store' });
+        const text = await r.text();
+        return json({ parada: id, status: r.status, ms: Date.now() - t0, headers: Object.fromEntries(r.headers), colo: (req.cf && req.cf.colo) || null, body: text.slice(0, 1500) });
+      } catch (e) {
+        return json({ parada: id, error: String((e && e.message) || e), ms: Date.now() - t0 }, 502);
+      }
+    }
 
     if (url.pathname === '/api/stop') {
       const id = parseInt(url.searchParams.get('id'), 10);
@@ -95,8 +118,7 @@ export default {
     }
 
     return new Response(HTML, { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-cache' } });
-  }
-};
+}
 
 function json(obj, status = 200, cache = 'no-store') {
   return new Response(JSON.stringify(obj), {
@@ -338,8 +360,7 @@ async function nextBuses(trip) {
   const all = [];
   await Promise.all(ALEXA_TRIPS[trip].map(async (s) => {
     try {
-      const r = await fetch(API + '?dato=' + s.id + '&func=0', { headers: UPSTREAM_HEADERS, cache: 'no-store' });
-      const j = JSON.parse(await r.text());
+      const { j } = await upstreamJSON(API + '?dato=' + s.id + '&func=0', { headers: UPSTREAM_HEADERS, cache: 'no-store' });
       traceUpstream(s.id, j);
       for (const l of (j.buses && j.buses.lineas) || []) {
         if (s.lines.indexOf(l.linea) < 0) continue;
@@ -437,8 +458,7 @@ async function departures(line, date) {
   const key = new Request('https://mibus.cache/servicios/' + line + '/' + date);
   const hit = await cache.match(key);
   if (hit) return hit.json();
-  const r = await fetch(API + '?func=8&dato=' + line + '&fecha=' + date, { headers: UPSTREAM_HEADERS });
-  const j = JSON.parse(await r.text());
+  const { j } = await upstreamJSON(API + '?func=8&dato=' + line + '&fecha=' + date, { headers: UPSTREAM_HEADERS });
   const sv = (j.servicios && j.servicios[0]) || {};
   const toMin = (a) => (a || []).map((n) => Math.floor(Number(n) / 100) * 60 + (Number(n) % 100));
   const out = { tipo: sv.tipo || '', ida: toMin(sv.ida), vuelta: toMin(sv.vuelta) };
@@ -535,8 +555,7 @@ async function getMeta() {
   const key = new Request('https://mibus.cache/meta/v2');
   const hit = await cache.match(key);
   if (hit) return hit.json();
-  const r = await fetch(API + '?dato=20160101T000000_gl_0_20160101T000000&func=7', { headers: UPSTREAM_HEADERS });
-  const j = JSON.parse(await r.text());
+  const { j } = await upstreamJSON(API + '?dato=20160101T000000_gl_0_20160101T000000&func=7', { headers: UPSTREAM_HEADERS });
   const a = (j.iTranvias && j.iTranvias.actualizacion) || {};
   const lines = {}, stops = {}, pos = {};
   for (const l of a.lineas || []) {
@@ -648,8 +667,7 @@ async function alexaConsulta(intent, attrs = {}, src = 'alexa') {
   const parts = [];
   await Promise.all(stops.map(async (sid) => {
     try {
-      const r = await fetch(API + '?dato=' + sid + '&func=0', { headers: UPSTREAM_HEADERS, cache: 'no-store' });
-      const j = JSON.parse(await r.text());
+      const { j } = await upstreamJSON(API + '?dato=' + sid + '&func=0', { headers: UPSTREAM_HEADERS, cache: 'no-store' });
       traceUpstream(sid, j);
       const items = [];
       for (const l of (j.buses && j.buses.lineas) || []) {
@@ -948,9 +966,8 @@ function pubMeta() {
 
 function pubStop(id) {
   return pubMemo("stop:" + id, PUB_STOP_TTL, async () => {
-    const r = await fetch(API + "?dato=" + id + "&func=0", { headers: UPSTREAM_HEADERS, cache: "no-store" });
+    const { r, j } = await upstreamJSON(API + "?dato=" + id + "&func=0", { headers: UPSTREAM_HEADERS, cache: "no-store" });
     if (!r.ok) throw new Error("iTranvías " + r.status);
-    const j = JSON.parse(await r.text());
     return { at: Date.now(), lineas: (j.buses && j.buses.lineas) || [] };
   });
 }
@@ -1213,6 +1230,57 @@ async function mcpPublic(req, env, url) {
 // qué slots, qué respondió la skill y qué devolvió iTranvías. Últimas 500.
 // =====================================================================
 var ALEXA_TRACE = null;
+// ---------- Registro de fallos de iTranvías ----------
+// Cada llamada a iTranvías pasa por aquí. Si falla la red, el HTTP no es 2xx, la respuesta
+// no es JSON o una consulta de parada (func=0) viene sin "buses", se guarda en D1
+// (tabla upstream_log) el código, las cabeceras útiles y el principio del cuerpo.
+var UPSTREAM_ERR = [];
+
+async function upstreamJSON(url, opts) {
+  const t0 = Date.now();
+  let r, text;
+  try {
+    r = await fetch(url, opts);
+    text = await r.text();
+  } catch (e) {
+    noteUpstream(url, null, String((e && e.message) || e), t0);
+    throw e;
+  }
+  let j;
+  try {
+    j = JSON.parse(text);
+  } catch (e) {
+    noteUpstream(url, r, text, t0);
+    throw new Error('iTranvías: respuesta no JSON (' + r.status + ')');
+  }
+  if (!r.ok || (/func=0/.test(url) && !(j && j.buses))) noteUpstream(url, r, text, t0);
+  return { r, j };
+}
+
+function noteUpstream(url, r, body, t0) {
+  if (UPSTREAM_ERR.length >= 10) return;
+  UPSTREAM_ERR.push({
+    q: url.replace(API, ''),
+    status: r ? r.status : 0,
+    ms: Date.now() - t0,
+    ct: r ? r.headers.get('content-type') : null,
+    server: r ? r.headers.get('server') : null,
+    body: String(body || '').slice(0, 300)
+  });
+}
+
+async function logUpstream(env, path, errs) {
+  try {
+    await env.DB.prepare('CREATE TABLE IF NOT EXISTS upstream_log (id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT NOT NULL, path TEXT, q TEXT, status INTEGER, ms INTEGER, ct TEXT, server TEXT, body TEXT)').run();
+    const ts = new Date().toISOString();
+    await env.DB.batch([
+      ...errs.map((e) => env.DB.prepare('INSERT INTO upstream_log (ts, path, q, status, ms, ct, server, body) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+        .bind(ts, path, e.q, e.status, e.ms, e.ct, e.server, e.body)),
+      env.DB.prepare('DELETE FROM upstream_log WHERE id <= (SELECT MAX(id) - 500 FROM upstream_log)')
+    ]);
+  } catch (e) {}
+}
+
 function traceUpstream(stop, j) {
   if (!ALEXA_TRACE) return;
   try {
