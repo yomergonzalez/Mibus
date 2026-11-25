@@ -149,11 +149,11 @@ footer{color:var(--mute);font-size:13px;text-align:center;padding:0 16px 28px}
 <script>
 {
 const DEF = {
-  ida: [{ id: 50, lines: [1200] }, { id: 99, lines: null }],
-  vuelta: [{ id: 40, lines: [1200, 1400] }, { id: 268, lines: [1400] }]
+  ida: [{ id: 50, lines: [1200] }, { id: 94, lines: [1400] }],
+  vuelta: [{ id: 40, lines: [1200, 1400] }, { id: 269, lines: [1400] }, { id: 120, lines: [1400, 1500, 2000] }]
 };
-const FALL_STOPS = { 50: 'Rda. de Nelle, 109', 99: 'Rda. de Outeiro, 109', 40: 'Av. de Oza, 7', 268: 'Ramón y Cajal, Casa do Mar' };
-const FALL_LINES = { 1200: { n: '12', c: '#019f02' }, 1400: { n: '14' }, 1500: { n: '12A', c: '#4db94c' } };
+const FALL_STOPS = { 50: 'Rda. de Nelle, 109', 94: 'Rda. de Outeiro, 249', 40: 'Av. de Oza, 7', 269: 'Rda. de Outeiro, Pérez Ardá', 120: 'Rda. de Outeiro, 126' };
+const FALL_LINES = { 1200: { n: '12', c: '#019f02' }, 1400: { n: '14' }, 1500: { n: '12A', c: '#4db94c' }, 2000: { n: '20' } };
 let meta = { lines: {}, stops: {} };
 let cfg = load();
 let tab = new Date().getHours() < 15 ? 'ida' : 'vuelta';
@@ -165,10 +165,10 @@ const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toL
 const hhmm = (t) => new Date(t).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
 
 function load() {
-  try { const s = JSON.parse(localStorage.getItem('mibus-cfg')); if (s && s.ida && s.vuelta) return s; } catch (e) {}
+  try { const s = JSON.parse(localStorage.getItem('mibus-cfg-v2')); if (s && s.ida && s.vuelta) return s; } catch (e) {}
   return JSON.parse(JSON.stringify(DEF));
 }
-function save() { try { localStorage.setItem('mibus-cfg', JSON.stringify(cfg)); } catch (e) {} }
+function save() { try { localStorage.setItem('mibus-cfg-v2', JSON.stringify(cfg)); } catch (e) {} }
 function stopName(id) { return meta.stops[id] || FALL_STOPS[id] || ('Parada ' + id); }
 function lineInfo(id) {
   const m = meta.lines[id] || FALL_LINES[id] || {};
