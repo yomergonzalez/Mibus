@@ -61,7 +61,15 @@ export default {
 
     // ---------- MCP (Alexa+ add-on y cualquier cliente MCP) ----------
     if (url.pathname === '/mcp/public') return mcpPublic(req, env, url);
-    if (url.pathname === '/mcp') return mcp(req, env, url);
+    if (url.pathname === '/mcp') {
+      const reqText = await req.clone().text().catch(() => '');
+      ALEXA_TRACE = [];
+      const trace = ALEXA_TRACE;
+      const res = await mcp(req, env, url);
+      ALEXA_TRACE = null;
+      if (env && env.DB && ctx) ctx.waitUntil(logMcp(env, req, reqText, res.clone(), trace));
+      return res;
+    }
     if (url.pathname === '/.well-known/oauth-protected-resource' || url.pathname === '/.well-known/oauth-protected-resource/mcp') {
       return json({ resource: url.origin + '/mcp', authorization_servers: [url.origin], scopes_supported: [MCP_SCOPE], bearer_methods_supported: ['header'], resource_name: 'Mi bus A Coruña' });
     }
@@ -1221,6 +1229,23 @@ async function logAlexa(env, body, res, trace) {
     await env.DB.batch([
       env.DB.prepare('INSERT INTO alexa_log (ts, req_type, intent, slots, speech, upstream) VALUES (?, ?, ?, ?, ?, ?)')
         .bind(new Date().toISOString(), rq.type || null, (rq.intent && rq.intent.name) || null, JSON.stringify(slots), speech, JSON.stringify(trace || []).slice(0, 4000)),
+      env.DB.prepare('DELETE FROM alexa_log WHERE id <= (SELECT MAX(id) - 500 FROM alexa_log)')
+    ]);
+  } catch (e) {}
+}
+
+// Registro de llamadas a herramientas del MCP privado (para ver si Alexa+ lo usa).
+async function logMcp(env, req, reqText, res, trace) {
+  try {
+    let msg = {};
+    try { msg = JSON.parse(reqText); } catch (e) {}
+    if (!msg || msg.method !== 'tools/call') return;
+    const out = await res.json().catch(() => ({}));
+    const text = (out.result && out.result.content && out.result.content[0] && out.result.content[0].text) || (out.error && out.error.message) || null;
+    const ua = (req.headers.get('user-agent') || '?').slice(0, 120);
+    await env.DB.batch([
+      env.DB.prepare('INSERT INTO alexa_log (ts, req_type, intent, slots, speech, upstream) VALUES (?, ?, ?, ?, ?, ?)')
+        .bind(new Date().toISOString(), 'mcp · ' + ua, (msg.params && msg.params.name) || null, JSON.stringify((msg.params && msg.params.arguments) || {}), text, JSON.stringify(trace || []).slice(0, 4000)),
       env.DB.prepare('DELETE FROM alexa_log WHERE id <= (SELECT MAX(id) - 500 FROM alexa_log)')
     ]);
   } catch (e) {}
