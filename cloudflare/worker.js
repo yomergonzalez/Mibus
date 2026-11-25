@@ -284,7 +284,7 @@ fetch('/api/meta').then((r) => r.json()).then((m) => { meta = m || meta; render(
 // Paradas y líneas favoritas para Alexa (las mismas que la app por defecto).
 const ALEXA_TRIPS = {
   // walk = minutos andando hasta la parada (desde casa en la ida, desde El Corte Inglés en la vuelta)
-  ida: [{ id: 50, name: 'Ronda de Nelle 109', lines: [1200], walk: 4 }, { id: 94, name: 'Ronda de Outeiro 249', lines: [1400], walk: 5 }],
+  ida: [{ id: 50, name: 'Ronda de Nelle 109', lines: [1200], walk: 4, main: true }, { id: 94, name: 'Ronda de Outeiro 249', lines: [1400], walk: 5 }],
   vuelta: [
     { id: 40, name: 'Avenida de Oza 7', lines: [1200, 1400], walk: 7 },
     { id: 269, name: 'Ronda de Outeiro, Pérez Ardá', lines: [1400], walk: 5 },
@@ -314,7 +314,7 @@ async function nextBuses(trip) {
         if (s.lines.indexOf(l.linea) < 0) continue;
         for (const b of l.buses || []) {
           const min = Math.round(parseMin(b.tiempo));
-          if (min >= s.walk) all.push({ line: LINE_NAMES[l.linea] || String(Math.floor(l.linea / 100)), min, stop: s.name, leave: min - s.walk });
+          if (min >= s.walk) all.push({ line: LINE_NAMES[l.linea] || String(Math.floor(l.linea / 100)), min, stop: s.name, leave: min - s.walk, main: !!s.main });
         }
       }
     } catch (e) {}
@@ -344,6 +344,14 @@ async function alexa(req, env) {
 
   const buses = await nextBuses(trip);
   if (!buses.length) return alexaSay('Ahora mismo no tengo buses a los que te dé tiempo a llegar, o iTranvías no responde. Prueba en un momento.');
+  const main = buses.filter((x) => x.main);
+  if (main.length) {
+    const m = main[0], alt = buses.find((x) => !x.main && x.leave < m.leave);
+    let t = 'El próximo ' + m.line + ' en ' + m.stop + ' pasa ' + when(m.min) + '. ' + leave(m.leave);
+    if (main[1]) t += ' El siguiente, ' + when(main[1].min) + '.';
+    if (alt) t += ' Si quieres algo antes, el ' + alt.line + ' en ' + alt.stop + ' pasa ' + when(alt.min) + '.';
+    return alexaSay(t);
+  }
   const [a, b, c] = buses;
   let text = 'El próximo que te da tiempo es el ' + a.line + ' en ' + a.stop + ', ' + when(a.min) + '. ' + leave(a.leave);
   if (b) text += ' Después, el ' + b.line + ' en ' + b.stop + ', ' + when(b.min) + '.';
