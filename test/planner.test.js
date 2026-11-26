@@ -70,31 +70,29 @@ test('porParadaDeSubida agrupa las líneas de cada parada', () => {
 const GTFS = path.join(__dirname, '..', 'gtfs');
 const hayRutas = fs.existsSync(path.join(GTFS, 'routes.json'));
 
-test('real: Casa → El Corte Inglés', { skip: !hayRutas && 'falta gtfs/routes.json (lo genera tools/gtfs_build.py)' }, () => {
+test('real: Casa → El Corte Inglés y vuelta', { skip: !hayRutas && 'falta gtfs/routes.json (lo genera tools/gtfs_build.py)' }, () => {
   const real = MiBusPlanner.crear({
     meta: JSON.parse(fs.readFileSync(path.join(GTFS, 'meta.json'), 'utf8')),
     routes: JSON.parse(fs.readFileSync(path.join(GTFS, 'routes.json'), 'utf8')),
   });
-  const CASA = [43.362, -8.4185];
-  const ECI = [43.357, -8.402];
+  const CASA = [43.362, -8.4185];   // entre Rda. de Nelle 109 y Rda. de Outeiro 249 (aprox.)
+  const ECI = [43.3535, -8.404];    // Rúa Ramón y Cajal, 57 (aprox.)
+  const ver = (o) => `${o.nombreLinea} ${o.sube.nombre} → ${o.baja.nombre} (${o.minAndandoIni}+${o.minBus}+${o.minAndandoFin} = ${o.total} min)`;
+
   const ida = real.opcionesDirectas(CASA, ECI);
-  const ver = (o) => `${o.nombreLinea} ${o.sube.nombre} → ${o.baja.nombre} (${o.total} min)`;
-  console.log('Ida:\n  ' + ida.map(ver).join('\n  '));
+  const idaRes = real.mejoresPorLinea(ida);
+  console.log('Ida:\n  ' + idaRes.map(ver).join('\n  '));
+  const doce = idaRes.find((o) => o.nombreLinea === '12');
+  const catorce = idaRes.find((o) => o.nombreLinea === '14');
+  assert.equal(doce && doce.sube.id, '50', 'el 12 desde Rda. de Nelle, 109');
+  assert.equal(catorce && catorce.sube.id, '94', 'el 14 desde Rda. de Outeiro, 249');
+  assert.equal(new Set(idaRes.map((o) => o.linea)).size, idaRes.length, 'una opción por línea');
 
-  const de = (linea, sube) => ida.find((o) => o.nombreLinea === linea && o.sube.id === sube);
-  const doce = de('12', '50');
-  assert.ok(doce, 'el 12 desde Rda. de Nelle, 109');
-  assert.equal(doce.baja.id, '40', 'el 12 baja en Av. de Oza, 7');
-  for (const l of ['14', 'BUH']) {
-    const o = de(l, '94');
-    assert.ok(o, `el ${l} desde Rda. de Outeiro, 249`);
-    assert.ok(['40', '268'].includes(o.baja.id), `el ${l} baja en Av. de Oza, 7 o Casa do Mar`);
-  }
-
-  const vuelta = real.opcionesDirectas(ECI, CASA);
+  const vuelta = real.mejoresPorLinea(real.opcionesDirectas(ECI, CASA));
   console.log('Vuelta:\n  ' + vuelta.map(ver).join('\n  '));
-  const doceVuelta = vuelta.find((o) => o.nombreLinea === '12');
-  assert.ok(doceVuelta, 'el 12 también sirve para volver');
-  assert.notEqual(doceVuelta.sentido, doce.sentido, 'la vuelta va en el otro sentido');
-  assert.ok(!vuelta.some((o) => o.sube.id === '50'), 'no se vuelve subiendo en Nelle 109 (va hacia el centro)');
+  const doceV = vuelta.find((o) => o.nombreLinea === '12');
+  const catorceV = vuelta.find((o) => o.nombreLinea === '14');
+  assert.equal(doceV && doceV.sube.id, '40', 'vuelta en el 12 desde Av. de Oza, 7');
+  assert.equal(catorceV && catorceV.sube.id, '269', 'vuelta en el 14 desde Rda. de Outeiro, Pérez Ardá');
+  assert.notEqual(doceV.sentido, doce.sentido, 'la vuelta va en el otro sentido');
 });

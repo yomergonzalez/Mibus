@@ -1,9 +1,8 @@
 name: Generar datos GTFS
 
+# Manual (Actions → Generar datos GTFS → Run workflow): descarga el GTFS nuevo de
+# Tranvías, regenera gtfs/ (con routes.json) y pasa los tests antes de guardar.
 on:
-  push:
-    branches: ["feat/planificador-trayectos"]
-    paths: ["tools/gtfs_build.py", ".github/workflows/gtfs.yml"]
   workflow_dispatch:
 
 permissions:

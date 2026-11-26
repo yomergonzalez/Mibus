@@ -12,7 +12,7 @@
  * Uso:
  *   const plan = MiBusPlanner.crear({ meta, routes });
  *   plan.paradasCerca([43.362, -8.4185]);
- *   plan.opcionesDirectas([43.362, -8.4185], [43.357, -8.402]);
+ *   plan.opcionesDirectas([43.362, -8.4185], [43.3535, -8.404]);
  *
  * Funciona en el navegador (window.MiBusPlanner) y en Node (require('./planner.js')).
  *
@@ -143,6 +143,15 @@
       return out;
     }
 
+    /**
+     * Una opción por línea: la parada de subida que antes te deja en el destino.
+     * Es lo que enseña la pantalla «Tus paradas» (Nelle 109 para el 12, no también Nelle 73).
+     */
+    function mejoresPorLinea(opciones) {
+      const vista = {};
+      return opciones.filter((o) => (vista[o.linea] ? false : (vista[o.linea] = true)));
+    }
+
     /** Las opciones agrupadas por parada de subida, como en la pantalla «Tus paradas». */
     function porParadaDeSubida(opciones) {
       const grupos = [];
@@ -157,7 +166,7 @@
       return grupos;
     }
 
-    return { paradasCerca, opcionesDirectas, porParadaDeSubida, tramos, distM, minAndando };
+    return { paradasCerca, opcionesDirectas, mejoresPorLinea, porParadaDeSubida, tramos, distM, minAndando };
   }
 
   return { crear, distM, minAndando };
