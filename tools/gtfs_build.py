@@ -10,6 +10,8 @@ El GTFS se descarga del Punto de Acceso Nacional (nap.transportes.gob.es,
   gtfs/meta.json         catálogo de respaldo, mismo formato que /api/meta
   gtfs/stops/<id>.json   horas de paso por línea y tipo de día
   gtfs/lines/<id>.json   salidas desde cabecera por sentido y tipo de día
+  gtfs/routes.json       recorridos: paradas en orden por línea y sentido, con minutos
+                         desde la cabecera (lo usa planner.js para elegir paradas)
 
 Los IDs de parada y de línea del GTFS son los mismos que usa iTranvías.
 Las horas van en minutos desde las 00:00. Solo usa la biblioteca estándar.
@@ -49,6 +51,37 @@ def parse_date(s):
 def read(z, name):
     with z.open(name) as f:
         return list(csv.DictReader(io.TextIOWrapper(f, encoding='utf-8-sig')))
+
+
+def build_routes(trips, seqs, max_variants=4, min_share=0.1):
+    """Recorridos por línea y sentido: {route_id: {direction_id: [variante, ...]}}.
+
+    Cada variante es {"n": viajes, "p": [[stop_id, minutos desde la cabecera], ...]} con las
+    paradas en orden de paso. Los minutos son la mediana de todos los viajes de esa variante.
+    Se guardan las variantes con al menos el 10 % de los viajes del sentido (máx. 4), la más
+    común primero: así entran los recorridos cortos o con desvío habitual.
+    """
+    pats = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
+    for tid, lst in seqs.items():
+        if len(lst) < 2:
+            continue
+        lst.sort()
+        t = trips[tid]
+        t0 = lst[0][2]
+        key = tuple(sid for _, sid, _ in lst)
+        pats[t['route_id']][t['direction_id'] or '0'][key].append([m - t0 for _, _, m in lst])
+    out = {}
+    for rid, dirs in sorted(pats.items(), key=lambda x: int(x[0])):
+        out[rid] = {}
+        for did, variants in sorted(dirs.items()):
+            total = sum(len(v) for v in variants.values())
+            ranked = sorted(variants.items(), key=lambda kv: -len(kv[1]))
+            keep = [kv for i, kv in enumerate(ranked) if i == 0 or len(kv[1]) >= total * min_share][:max_variants]
+            out[rid][did] = []
+            for key, offs in keep:
+                med = [sorted(col)[len(col) // 2] for col in zip(*offs)]
+                out[rid][did].append({'n': len(offs), 'p': [[int(sid), m] for sid, m in zip(key, med)]})
+    return out
 
 
 def main(path):
@@ -122,6 +155,7 @@ def main(path):
         if p is not None:
             trip_pat[tid] = renum[p]
     first = {}  # trip_id -> (stop_sequence, stop_id, minutos) de la primera parada del viaje
+    seqs = defaultdict(list)  # trip_id -> [(stop_sequence, stop_id, minutos)] para los recorridos
     with z.open('stop_times.txt') as f:
         for r in csv.DictReader(io.TextIOWrapper(f, encoding='utf-8-sig')):
             p = trip_pat.get(r['trip_id'])
@@ -130,6 +164,7 @@ def main(path):
             h, m, _ = (int(x) for x in (r['departure_time'] or r['arrival_time']).split(':'))
             times[r['stop_id']][trips[r['trip_id']]['route_id']][p].add(h * 60 + m)
             seq = int(r['stop_sequence'])
+            seqs[r['trip_id']].append((seq, r['stop_id'], h * 60 + m))
             if r['trip_id'] not in first or seq < first[r['trip_id']][0]:
                 first[r['trip_id']] = (seq, r['stop_id'], h * 60 + m)
 
@@ -177,6 +212,8 @@ def main(path):
                 's': {str(p): sorted(v) for p, v in sorted(d['t'].items())},
             }
         dump(os.path.join('lines', rid + '.json'), {'id': int(rid), 'n': r.get('route_short_name', rid), 'd': out_dirs})
+
+    dump('routes.json', build_routes(trips, seqs))
 
     meta = {'lines': {}, 'stops': {}, 'pos': {}}
     for rid, r in routes.items():
