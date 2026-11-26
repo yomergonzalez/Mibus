@@ -744,7 +744,7 @@ const RO = { readOnlyHint: true, destructiveHint: false, idempotentHint: false, 
 // =====================================================================
 var UI_URI = "ui://mibus/llegadas.html";
 var UI_MIME = "text/html;profile=mcp-app";
-var UI_META = { ui: { resourceUri: UI_URI }, "openai/outputTemplate": UI_URI };
+var UI_META = { ui: { resourceUri: UI_URI }, "openai/outputTemplate": UI_URI, "openai/widgetAccessible": true };
 
 function uiResourceList() {
   return { resources: [{ uri: UI_URI, name: "llegadas", title: "Panel de llegadas", description: "Panel con los próximos buses de A Coruña", mimeType: UI_MIME }] };
@@ -833,6 +833,18 @@ button[disabled]{opacity:.5;cursor:default}
 .stale{color:var(--warn);font-size:12px}
 .loading{color:var(--tx3);padding:18px 0;text-align:center}
 footer{color:var(--tx3);font-size:11px;margin-top:8px}
+.sub{color:var(--tx3);font-size:12px;margin:-6px 0 8px}
+.opt{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--bd)}
+.opt:first-of-type{border-top:0}
+.opt.rec{background:var(--bg2);border-radius:8px;padding:8px;border-top:0;margin:2px -8px}
+.tag{display:inline-block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ok);margin-left:6px}
+.hrs{font-variant-numeric:tabular-nums;font-weight:600;font-size:14px;text-align:right}
+.live::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--ok);margin-right:6px;vertical-align:middle}
+.old::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--warn);margin-right:6px;vertical-align:middle}
+.sched{color:var(--tx2);font-style:italic;font-weight:600}
+.sched::before{content:"🕒";font-style:normal;font-size:12px;margin-right:4px}
+.badge{font-size:11px;font-weight:600;color:var(--tx3)}
+.badge.live,.badge.old{color:var(--tx2)}
 </style></head>
 <body><div class="wrap" id="app"><div class="loading">Cargando llegadas…</div></div>
 <script>
@@ -862,7 +874,7 @@ footer{color:var(--tx3);font-size:11px;margin-top:8px}
   function onResult(r){
     if (!r) return;
     var sc = r.structuredContent;
-    if (sc && sc.paradas) { data = sc; gotAt = Date.now(); render(); return; }
+    if (isData(sc)) { data = sc; gotAt = Date.now(); render(); return; }
     var t = (r.content || []).filter(function(c){ return c.type === "text"; }).map(function(c){ return c.text; }).join("\n");
     app.innerHTML = '<div class="empty" style="white-space:pre-wrap">' + esc(t || "Sin datos.") + "</div>";
     resize();
@@ -875,10 +887,49 @@ footer{color:var(--tx3);font-size:11px;margin-top:8px}
     return '<span class="lv ' + (s < 5 ? "bad" : s < 10 ? "warn" : "ok") + '">🚶 sal ' + clock(gotAt + s * 60000) + " · en " + s + " min</span>";
   }
 
+  function isData(x){ return !!(x && (x.paradas || x.opciones || x.filas)); }
+  function chip(linea, color){
+    var bg = color ? ' style="background:' + esc(/^#?[0-9a-f]{3,8}$/i.test(color) ? (color[0] === "#" ? color : "#" + color) : "#555") + '"' : "";
+    return '<span class="ln"' + bg + ">" + esc(linea) + "</span>";
+  }
+  function head(sub){
+    var h = "<header><h1>" + esc(data.titulo || "Mi bus") + '</h1><div class="meta"><span class="badge">🕒 Horario</span></div></header>';
+    if (sub) h += '<div class="sub">' + esc(sub) + "</div>";
+    return h;
+  }
+  // Plan "qué bus cojo": horario programado, sin refresco.
+  function renderPlan(){
+    var h = head([data.fecha, data.tipo_dia].filter(Boolean).join(" · "));
+    if (!(data.opciones || []).length) h += '<div class="empty">No hay buses para esa hora.</div>';
+    (data.opciones || []).forEach(function(o){
+      h += '<div class="opt' + (o.recomendado ? " rec" : "") + '">' + chip(o.linea, o.color);
+      h += '<span class="to"><b>' + esc(o.parada) + "</b>" + (o.recomendado ? '<span class="tag">recomendado</span>' : "") + "<br>🚶 sal " + esc(o.sal) + " · llegas " + esc(o.llegas) + "</span>";
+      h += '<span class="right"><span class="min sched"><small>pasa </small>' + esc(o.pasa) + "</span></span></div>";
+    });
+    h += "<footer>Horario programado · puede variar con el tráfico</footer>";
+    app.innerHTML = h; resize();
+  }
+  // "Qué bus pasa a las X": horas programadas por parada y línea.
+  function renderHorario(){
+    var h = head([data.fecha, data.tipo_dia].filter(Boolean).join(" · "));
+    if (!(data.filas || []).length) h += '<div class="empty">No hay buses en ese rango.</div>';
+    (data.filas || []).forEach(function(f){
+      h += '<div class="row">' + chip(f.linea, f.color) + '<span class="to"><b>' + esc(f.parada) + "</b></span>";
+      h += '<span class="hrs sched">' + (f.horas || []).map(esc).join(" · ") + "</span></div>";
+    });
+    h += "<footer>Horario programado · puede variar con el tráfico</footer>";
+    app.innerHTML = h; resize();
+  }
+
   function render(){
     if (!data) return;
+    if (data.opciones) return renderPlan();
+    if (data.filas) return renderHorario();
     var drift = Math.floor((Date.now() - gotAt) / 60000);
-    var h = "<header><h1>" + esc(data.titulo || "Próximos buses") + '</h1><div class="meta"><span>' + clock(gotAt) + "</span>";
+    var ps = data.paradas || [];
+    var allProg = ps.length && ps.every(function(p){ return p.programado; }), anyOld = ps.some(function(p){ return p.stale || p.programado; });
+    var badge = allProg ? '<span class="badge">🕒 Horario</span>' : anyOld ? '<span class="badge old">En vivo (parcial)</span>' : '<span class="badge live">En vivo</span>';
+    var h = "<header><h1>" + esc(data.titulo || "Próximos buses") + '</h1><div class="meta">' + badge + "<span>" + clock(gotAt) + "</span>";
     if (data.refresh) h += '<button id="rf"' + (busy ? " disabled" : "") + ">" + (busy ? "Actualizando…" : "Actualizar") + "</button>";
     h += "</div></header>";
     var single = (data.paradas || []).length === 1;
@@ -890,7 +941,7 @@ footer{color:var(--tx3);font-size:11px;margin-top:8px}
       if (p.metros != null) bits.push(p.metros + " m");
       bits.push("nº " + p.id);
       h += esc(bits.join(" · ")) + "</span></div>";
-      if (p.programado) h += '<div class="stale">Horario programado (iTranvías no responde)</div>';
+      if (p.programado) h += '<div class="stale">🕒 Horario programado: iTranvías no responde, no es tiempo real</div>';
       if (p.stale) h += '<div class="stale">Dato de hace ' + Math.max(1, Math.round((p.edad_s || 0) / 60) + drift) + " min (iTranvías no responde)</div>";
       // En un trayecto solo se muestran los buses a los que llegas andando; como mucho 4 por parada.
       var list = (p.llegadas || []).filter(function(b){ return b.min - drift >= (p.andando != null ? p.andando : 0); }).slice(0, 4);
@@ -901,13 +952,14 @@ footer{color:var(--tx3);font-size:11px;margin-top:8px}
         var bg = b.color ? ' style="background:' + esc(/^#?[0-9a-f]{3,8}$/i.test(b.color) ? (b.color[0] === "#" ? b.color : "#" + b.color) : "#555") + '"' : "";
         h += '<div class="row"><span class="ln"' + bg + ">" + esc(b.linea) + "</span>";
         h += '<span class="to">' + (b.hacia ? "→ " + esc(b.hacia) : "") + (b.metros ? (b.hacia ? " · " : "") + (b.metros >= 1000 ? (b.metros / 1000).toFixed(1).replace(".", ",") + " km" : b.metros + " m") : "") + "</span>";
-        h += '<span class="right">' + (m <= 0 ? '<span class="min now">llegando</span>' : '<span class="min"><small>pasa </small>' + clock(gotAt + m * 60000) + "</span>");
+        var src = p.programado ? " sched" : p.stale ? " old" : " live";
+        h += '<span class="right">' + (m <= 0 && !p.programado ? '<span class="min now' + src + '">llegando</span>' : '<span class="min' + src + '"><small>pasa </small>' + clock(gotAt + m * 60000) + "</span>");
         if (p.andando != null) h += leave(m, p.andando); else if (m > 0) h += '<span class="lv gone">en ' + m + " min</span>";
         h += "</span></div>";
       });
       h += "</section>";
     });
-    h += "<footer>Datos en vivo de iTranvías · fuente no oficial</footer>";
+    h += "<footer>● en vivo (iTranvías) · 🕒 horario programado · fuente no oficial</footer>";
     app.innerHTML = h;
     var rf = document.getElementById("rf");
     if (rf) rf.onclick = refresh;
@@ -953,17 +1005,24 @@ footer{color:var(--tx3);font-size:11px;margin-top:8px}
   });
 
   // Compatibilidad con el puente antiguo de ChatGPT (window.openai)
+  // ChatGPT puede dejar los datos en window.openai.toolOutput antes de que el panel escuche,
+  // así que se leen al arrancar, tras el saludo, en cada set_globals y unos segundos más.
+  var lastOut = null;
   function fromOpenAI(){
     var o = window.openai;
     if (!o) return false;
     if (o.theme) applyContext({ theme: o.theme });
-    if (o.toolOutput && o.toolOutput.paradas) { data = o.toolOutput; gotAt = Date.now(); render(); }
+    var out = o.toolOutput;
+    if (out && out.structuredContent) out = out.structuredContent;
+    if (isData(out) && out !== lastOut) { lastOut = out; data = out; gotAt = Date.now(); render(); }
     return true;
   }
   window.addEventListener("openai:set_globals", fromOpenAI);
+  fromOpenAI();
+  var tries = 0, poll = setInterval(function(){ if (data || ++tries > 40) return clearInterval(poll); fromOpenAI(); }, 250);
 
-  request("ui/initialize", { appInfo: { name: "mibus-llegadas", version: "1.0.0" }, appCapabilities: {}, protocolVersion: "2026-01-26" })
-    .then(function(r){ applyContext(r && r.hostContext); notify("ui/notifications/initialized", {}); })
+  request("ui/initialize", { appInfo: { name: "mibus-llegadas", version: "1.1.0" }, appCapabilities: {}, protocolVersion: "2026-01-26" })
+    .then(function(r){ applyContext(r && r.hostContext); notify("ui/notifications/initialized", {}); fromOpenAI(); })
     .catch(function(){ fromOpenAI(); });
 
   setInterval(function(){ if (data) render(); }, 30000);
@@ -985,27 +1044,73 @@ function toolResult(out) {
   return { content: [{ type: 'text', text: out || 'No tengo datos ahora mismo.' }], isError: false };
 }
 
+// ---------- Respuestas para LLMs: horas HH:MM y datos, sin frases de voz ----------
+// (La skill de Alexa sigue usando runIntent con sus frases habladas.)
+function boardsText(title, boards) {
+  const now = madridNow().min;
+  const out = [title + ' — ahora ' + fmt(now)];
+  let best = null;
+  for (const b of boards) {
+    const bits = [b.nombre + ' (parada ' + b.id + (b.andando != null ? ', ' + b.andando + ' min andando' : '') + (b.metros != null ? ', a ' + b.metros + ' m' : '') + ')'];
+    if (b.programado) bits.push('HORARIO PROGRAMADO (no es tiempo real): iTranvías no responde');
+    else if (b.stale) bits.push('último dato en vivo de hace ' + Math.max(1, Math.round((b.edad_s || 0) / 60)) + ' min: iTranvías no responde');
+    else if (!b.error) bits.push('en vivo');
+    out.push(bits.join(' · '));
+    if (b.error && !(b.llegadas || []).length) { out.push('  ' + b.error); continue; }
+    const walk = b.andando != null ? b.andando : null;
+    const list = (b.llegadas || []).filter((x) => walk == null || x.min >= walk).slice(0, 4);
+    if (!list.length) { out.push('  ' + (walk != null && (b.llegadas || []).length ? 'ningún bus al que llegues andando' : 'sin buses próximos')); continue; }
+    for (const x of list) {
+      let t = '  - Línea ' + x.linea + ': pasa ' + x.hora + ' (' + (x.min <= 0 ? 'llegando' : 'en ' + x.min + ' min') + ')';
+      if (walk != null) {
+        const lv = x.min - walk;
+        t += ', salir ' + fmt(now + lv) + (lv <= 0 ? ' (¡ya!)' : ' (en ' + lv + ' min)');
+        if (!best || lv < best.lv) best = { lv, linea: x.linea, parada: b.nombre, hora: x.hora };
+      }
+      out.push(t);
+    }
+  }
+  if (best) out.push('Primero al que llegas andando: línea ' + best.linea + ' en ' + best.parada + ', pasa ' + best.hora + ', salir ' + fmt(now + best.lv) + '.');
+  return out.join('\n');
+}
+
+// Fecha de un plan: la indicada, o mañana si la hora ya pasó (como la skill).
+function planDate(hora, fecha) {
+  const now = madridNow();
+  if (fecha) return fecha;
+  if (parseHHMM(hora) < now.min - 30) { const d = new Date(now.date + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + 1); return d.toISOString().slice(0, 10); }
+  return now.date;
+}
+
+function lineColor(meta, id) { return (meta && meta.lines && meta.lines[id] && meta.lines[id].c) || null; }
+
+// Horas programadas de una línea en una parada: GTFS por parada; si no cubre la fecha, cabecera + desfase.
+async function scheduleAt(e, ymd) {
+  const st = await gtfsStopTimes(e.id, ymd).catch(() => null);
+  if (st) return { tipo: st.tipo, times: st.lines[e.line] || [] };
+  const dep = await pubDepartures(e.line, ymd);
+  return { tipo: dep.tipo || '', times: (dep[e.dir] || []).map((d) => d + e.off) };
+}
+
 const MCP_TOOLS = [
   {
     name: 'proximos_buses',
     title: 'Próximos buses de mi trayecto',
     description: 'Live next buses for the user\'s daily commute in A Coruña (Spain), from iTranvías real-time data. ' +
       'trayecto "ida" = from home to work (El Corte Inglés); "vuelta" = from work back home. If omitted, it picks ida before 15:00 and vuelta after (Europe/Madrid). ' +
-      'Only lists buses the user can still reach on foot. Answer in Spanish. Use for: "¿cuándo pasa mi bus?", "el bus al trabajo", "el bus a casa".',
+      'Returns, per stop, the buses the user can still reach on foot: time it passes (HH:MM), minutes until then, and when to leave. Answer in Spanish. Use for: "¿cuándo pasa mi bus?", "el bus al trabajo", "el bus a casa".',
     inputSchema: { type: 'object', properties: { trayecto: { type: 'string', enum: ['ida', 'vuelta'], description: 'ida = casa → trabajo; vuelta = trabajo → casa' } }, additionalProperties: false },
     annotations: RO,
     _meta: UI_META,
     run: async (a) => {
-      const text = await runIntent(a.trayecto === 'ida' ? 'IdaIntent' : a.trayecto === 'vuelta' ? 'VueltaIntent' : null);
-      return withUi(text, async () => {
-        const trip = a.trayecto || defaultTrip('mcp', madridNow().min);
-        const meta = await pubMeta();
-        const st = ALEXA_TRIPS[trip];
-        const lines = {}, walk = {};
-        for (const x of st) { lines[x.id] = x.lines; walk[x.id] = x.walk; }
-        const boards = await uiBoards(meta, st.map((x) => x.id), { lines, walk });
-        return uiPayload(trip === 'ida' ? 'Ida · casa → trabajo' : 'Vuelta · trabajo → casa', boards, { tool: 'proximos_buses', arguments: { trayecto: trip } });
-      });
+      const trip = a.trayecto || defaultTrip('mcp', madridNow().min);
+      const meta = await pubMeta();
+      const st = ALEXA_TRIPS[trip];
+      const lines = {}, walk = {};
+      for (const x of st) { lines[x.id] = x.lines; walk[x.id] = x.walk; }
+      const boards = await uiBoards(meta, st.map((x) => x.id), { lines, walk });
+      const title = trip === 'ida' ? 'Ida · casa → trabajo' : 'Vuelta · trabajo → casa';
+      return { text: boardsText(title, boards), structured: uiPayload(title, boards, { tool: 'proximos_buses', arguments: { trayecto: trip } }) };
     }
   },
   {
@@ -1013,7 +1118,7 @@ const MCP_TOOLS = [
     title: 'Consultar una línea o parada',
     description: 'Live arrivals for any A Coruña city bus line and/or stop (iTranvías real time). ' +
       'Give a line ("14", "12A"), a stop by street name ("Ronda de Outeiro 126", "corte inglés", "casa") or a stop number, or a combination. ' +
-      'With only a line, it checks the user\'s usual stops. Use for: "¿cuándo pasa el 14?", "¿qué buses pasan por Outeiro 126?".',
+      'With only a line, it checks the user\'s usual stops. Returns times as HH:MM and minutes. Use for: "¿cuándo pasa el 14?", "¿qué buses pasan por Outeiro 126?".',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1027,37 +1132,39 @@ const MCP_TOOLS = [
     validate: (a) => (a.linea || a.parada || a.numero_parada) ? null : 'Indica una línea, una parada o un número de parada.',
     _meta: UI_META,
     run: async (a) => {
-      const text = await runIntent('ConsultaIntent', { linea: a.linea, parada: a.parada, numero: a.numero_parada });
-      return withUi(text, async () => {
-        const meta = await pubMeta();
-        const lineId = a.linea ? findLine(meta, a.linea) : null;
-        if (a.linea && !lineId) return null;
-        const trip = defaultTrip('mcp', madridNow().min);
-        const mine = [...new Set(ALEXA_TRIPS.ida.concat(ALEXA_TRIPS.vuelta).map((x) => x.id))];
-        let stops = [], walk = null;
-        if (a.numero_parada && meta.stops[a.numero_parada]) stops = [Number(a.numero_parada)];
-        else if (a.parada) {
-          const f = findStop(meta, a.parada, mine);
-          if (!f || f.ambiguous) return null;
-          stops = [f.id];
-        } else if (lineId) {
-          stops = ALEXA_TRIPS[trip].map((x) => x.id);
-          walk = {};
-          for (const x of ALEXA_TRIPS[trip]) walk[x.id] = x.walk;
+      const meta = await pubMeta();
+      const lineId = a.linea ? findLine(meta, a.linea) : null;
+      if (a.linea && !lineId) return 'No conozco la línea «' + a.linea + '».';
+      const trip = defaultTrip('mcp', madridNow().min);
+      const mine = [...new Set(ALEXA_TRIPS.ida.concat(ALEXA_TRIPS.vuelta).map((x) => x.id))];
+      let stops = [], walk = null;
+      if (a.numero_parada) {
+        if (!meta.stops[a.numero_parada]) return 'No existe la parada ' + a.numero_parada + '.';
+        stops = [Number(a.numero_parada)];
+      } else if (a.parada) {
+        const f = findStop(meta, a.parada, mine);
+        if (!f) return 'No encuentro la parada «' + a.parada + '». Prueba con la calle y el número, o con el número de parada.';
+        if (f.ambiguous) {
+          const ids = Object.keys(meta.stops).filter((id) => f.ambiguous.indexOf(meta.stops[id]) >= 0).slice(0, 5);
+          return 'Hay varias paradas que encajan con «' + a.parada + '». Pregunta cuál o usa numero_parada:\n' + ids.map((id) => '- Parada ' + id + ': ' + pubStopName(meta, id)).join('\n');
         }
-        if (!stops.length) return null;
-        const boards = await uiBoards(meta, stops, { lineId, walk });
-        const title = lineId ? 'Línea ' + pubLineName(meta, lineId) + (stops.length === 1 ? ' · ' + pubStopName(meta, stops[0]) : '') : pubStopName(meta, stops[0]);
-        return uiPayload(title, boards, { tool: 'consultar_parada', arguments: a });
-      });
+        stops = [f.id];
+      } else {
+        stops = ALEXA_TRIPS[trip].map((x) => x.id);
+        walk = {};
+        for (const x of ALEXA_TRIPS[trip]) walk[x.id] = x.walk;
+      }
+      const boards = await uiBoards(meta, stops, { lineId, walk });
+      const title = lineId ? 'Línea ' + pubLineName(meta, lineId) + (stops.length === 1 ? ' · ' + pubStopName(meta, stops[0]) : ' · tus paradas de ' + trip) : pubStopName(meta, stops[0]);
+      return { text: boardsText(title, boards), structured: uiPayload(title, boards, { tool: 'consultar_parada', arguments: a }) };
     }
   },
   {
     name: 'planificar_viaje',
     title: 'Planificar el viaje para una hora',
-    description: 'Plans the commute with the scheduled timetable. trayecto "ida": which bus to take to ARRIVE at work by the given time. ' +
+    description: 'Plans the commute with the scheduled timetable (exact times per stop). trayecto "ida": which bus to take to ARRIVE at work by the given time. ' +
       'trayecto "vuelta": best bus home when LEAVING work at the given time. hora in 24h HH:MM; fecha optional (YYYY-MM-DD, defaults to today or tomorrow if the time has passed). ' +
-      'Use for: "¿qué bus cojo para llegar a las 9?", "si salgo a las 18:30, ¿qué bus me llevo?".',
+      'Returns options with leave / bus / arrival times (HH:MM) and the recommended one. Use for: "¿qué bus cojo para llegar a las 9?", "si salgo a las 18:30, ¿qué bus me llevo?".',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1070,25 +1177,68 @@ const MCP_TOOLS = [
     },
     annotations: { ...RO, openWorldHint: true },
     validate: (a) => !['ida', 'vuelta'].includes(a.trayecto) ? 'trayecto debe ser "ida" o "vuelta".' : !HORA_RE.test(a.hora || '') ? 'hora debe tener formato HH:MM.' : a.fecha && !FECHA_RE.test(a.fecha) ? 'fecha debe tener formato YYYY-MM-DD.' : null,
-    run: (a) => runIntent(a.trayecto === 'ida' ? 'LlegarIntent' : 'SalirIntent', { hora: a.hora, dia: a.fecha })
+    _meta: UI_META,
+    run: async (a) => {
+      const t = parseHHMM(a.hora), date = planDate(a.hora, a.fecha);
+      const p = await plan(a.trayecto, t, date.replace(/-/g, ''));
+      const meta = await pubMeta().catch(() => null);
+      const ida = a.trayecto === 'ida';
+      const top = p.options.slice(0, 5);
+      const rec = ida ? (top.find((o) => o.main) || top[0]) : top[0];
+      const opts = top.slice().sort((x, y) => x.bus.localeCompare(y.bus)); // en orden de paso
+      const titulo = ida ? 'Llegar al trabajo a las ' + fmt(t) : 'Volver a casa saliendo a las ' + fmt(t);
+      if (!opts.length) return { text: titulo + ' (' + date + '): no hay buses para esa hora.', structured: { titulo, fecha: date, tipo_dia: p.tipo, opciones: [] } };
+      const text = [titulo + ' — ' + date + (p.tipo ? ' (' + p.tipo + ')' : '') + ', horario programado (puede variar con el tráfico):']
+        .concat(opts.map((o) => '- Línea ' + o.line + ' en ' + o.stop + ': salir ' + o.leave + ', pasa ' + o.bus + ', llegada ' + o.arrive + (o === rec ? '  ← recomendado' : '')))
+        .join('\n');
+      return {
+        text,
+        structured: {
+          titulo, fecha: date, tipo_dia: p.tipo, trayecto: a.trayecto, hora: fmt(t),
+          opciones: opts.map((o) => ({ linea: o.line, color: lineColor(meta, o.lineId), parada: o.stop, sal: o.leave, pasa: o.bus, llegas: o.arrive, recomendado: o === rec }))
+        }
+      };
+    }
   },
   {
     name: 'buses_a_una_hora',
     title: 'Qué buses pasan a una hora',
-    description: 'Scheduled buses at the user\'s usual stops around a given time (10 minutes before to 20 minutes after). ' +
-      'hora in 24h HH:MM; fecha optional (YYYY-MM-DD). Use for: "¿qué bus pasa a las nueve?".',
+    description: 'Scheduled buses at the user\'s usual stops around a given time (10 minutes before to 20 minutes after), with exact times per stop (HH:MM). ' +
+      'hora in 24h HH:MM; fecha optional (YYYY-MM-DD); trayecto optional (default: ida before 15:00, vuelta after). Use for: "¿qué bus pasa a las nueve?".',
     inputSchema: {
       type: 'object',
       properties: {
         hora: { type: 'string', pattern: '^\\d{1,2}(:\\d{2})?$', description: 'Hora en formato 24 h' },
-        fecha: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$', description: 'Fecha YYYY-MM-DD (opcional)' }
+        fecha: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$', description: 'Fecha YYYY-MM-DD (opcional)' },
+        trayecto: { type: 'string', enum: ['ida', 'vuelta'], description: 'Paradas de ida (casa) o de vuelta (trabajo). Opcional.' }
       },
       required: ['hora'],
       additionalProperties: false
     },
     annotations: RO,
-    validate: (a) => !HORA_RE.test(a.hora || '') ? 'hora debe tener formato HH:MM.' : a.fecha && !FECHA_RE.test(a.fecha) ? 'fecha debe tener formato YYYY-MM-DD.' : null,
-    run: (a) => runIntent('PasaIntent', { hora: a.hora, dia: a.fecha })
+    validate: (a) => !HORA_RE.test(a.hora || '') ? 'hora debe tener formato HH:MM.' : a.fecha && !FECHA_RE.test(a.fecha) ? 'fecha debe tener formato YYYY-MM-DD.' : a.trayecto && !['ida', 'vuelta'].includes(a.trayecto) ? 'trayecto debe ser "ida" o "vuelta".' : null,
+    _meta: UI_META,
+    run: async (a) => {
+      const t = parseHHMM(a.hora), date = planDate(a.hora, a.fecha), ymd = date.replace(/-/g, '');
+      const trip = a.trayecto || defaultTrip('mcp', t);
+      const meta = await pubMeta().catch(() => null);
+      const seen = new Set(), filas = [];
+      let tipo = '';
+      for (const e of PLAN[trip]) {
+        const k = e.line + '|' + e.id;
+        if (seen.has(k)) continue;
+        seen.add(k);
+        const sc = await scheduleAt(e, ymd);
+        tipo = tipo || sc.tipo;
+        const horas = sc.times.filter((b) => b >= t - 10 && b <= t + 20).slice(0, 4).map(fmt);
+        if (horas.length) filas.push({ linea: LINE_NAMES[e.line] ? LINE_NAMES[e.line].replace(' ', '') : String(e.line / 100), color: lineColor(meta, e.line), parada: e.stop, horas });
+      }
+      const titulo = 'Buses sobre las ' + fmt(t) + ' · ' + (trip === 'ida' ? 'paradas de casa' : 'paradas del trabajo');
+      const text = filas.length
+        ? [titulo + ' — ' + date + (tipo ? ' (' + tipo + ')' : '') + ', horario programado:'].concat(filas.map((f) => '- Línea ' + f.linea + ' en ' + f.parada + ': ' + f.horas.join(', '))).join('\n')
+        : titulo + ' — ' + date + ': no hay buses entre ' + fmt(t - 10) + ' y ' + fmt(t + 20) + '.';
+      return { text, structured: { titulo, fecha: date, tipo_dia: tipo, filas } };
+    }
   }
 ];
 
@@ -1139,7 +1289,7 @@ async function mcp(req, env, url) {
         protocolVersion: MCP_VERSIONS.includes(asked) ? asked : MCP_VERSIONS[0],
         capabilities: { tools: { listChanged: false }, resources: { listChanged: false } },
         serverInfo: { name: 'mibus', title: 'Mi bus A Coruña', version: '1.0.0' },
-        instructions: 'Horarios en tiempo real de los buses urbanos de A Coruña (iTranvías) para los trayectos diarios del usuario: ida (casa → trabajo en El Corte Inglés) y vuelta. Las herramientas devuelven frases en español listas para decir en voz alta.'
+        instructions: 'Horarios en tiempo real de los buses urbanos de A Coruña (iTranvías) para los trayectos diarios del usuario: ida (casa → trabajo en El Corte Inglés) y vuelta. Las herramientas devuelven horas en formato HH:MM, minutos y datos estructurados; redacta tú la respuesta en español, breve. Si un resultado dice HORARIO PROGRAMADO, avisa de que no es tiempo real.'
       });
     }
     case 'ping':
@@ -1239,14 +1389,16 @@ async function verifyToken(token, env, origin) {
 
 // =====================================================================
 // MCP PÚBLICO (/mcp/public): genérico, sin datos personales ni auth.
-// Herramientas: buscar_parada, paradas_cercanas, proximos_buses, horario_linea.
-// Caché en memoria (caches.default no funciona en *.workers.dev) + rate limit por IP.
+// Herramientas: buscar_parada, paradas_cercanas, proximos_buses, horario_parada, horario_linea.
+// Caché en memoria (caches.default no funciona en *.workers.dev) + tope global por isolate.
+// No se limita por IP: los clientes como Claude llaman desde unas pocas IPs compartidas por
+// todos sus usuarios. A iTranvías lo protegen la caché, el presupuesto y la pausa.
 // =====================================================================
 
 var PUB_STOP_TTL = 60e3;            // tiempos en vivo: 60 s por parada (iTranvías: máx. 4 peticiones/min por IP)
 var PUB_META_TTL = 6 * 3600e3;      // paradas y líneas: 6 h
 var PUB_DEP_TTL = 6 * 3600e3;       // horarios programados: 6 h
-var PUB_RATE_PER_MIN = 60;          // peticiones por IP y minuto (por isolate)
+var PUB_RATE_PER_MIN = 600;         // peticiones por minuto en total (por isolate): solo contra abusos
 var pubCache = new Map();
 var pubHits = new Map();
 
@@ -1265,11 +1417,10 @@ function pubMemo(key, ttl, fn) {
 }
 
 function pubRateLimited(req) {
-  const ip = req.headers.get("cf-connecting-ip") || "anon";
-  const k = ip + ":" + Math.floor(Date.now() / 60000);
+  const k = String(Math.floor(Date.now() / 60000));
   const n = (pubHits.get(k) || 0) + 1;
+  if (!pubHits.has(k)) pubHits.clear();
   pubHits.set(k, n);
-  if (pubHits.size > 5000) pubHits.clear();
   return n > PUB_RATE_PER_MIN;
 }
 
@@ -1524,6 +1675,53 @@ var PUB_TOOLS = [
     }
   },
   {
+    name: "horario_parada",
+    title: "Horario programado en una parada",
+    description: "Scheduled times (timetable, not real time) at an A Coruña city bus stop for a date, optionally for one line and from a given time. Use for planning ahead: \"¿a qué hora pasa el 14 por Outeiro 126 mañana a las 8?\", first/last bus at a stop. Free of the real-time quota: prefer it over proximos_buses for anything not happening in the next minutes.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        parada: { type: "string", description: 'Calle o lugar de la parada, p. ej. "Ronda de Outeiro 126"' },
+        numero_parada: { type: "integer", minimum: 1, description: "Número de parada de iTranvías" },
+        linea: { type: "string", description: 'Línea opcional, p. ej. "14" o "12A"' },
+        fecha: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$", description: "Fecha YYYY-MM-DD (por defecto hoy)" },
+        desde: { type: "string", pattern: "^\\d{1,2}(:\\d{2})?$", description: "Desde esta hora (HH:MM, por defecto ahora si es hoy)" }
+      },
+      additionalProperties: false
+    },
+    annotations: PUB_RO,
+    validate: (a) => (!a.parada && !a.numero_parada ? "Indica una parada (nombre o número)." : a.fecha && !/^\d{4}-\d{2}-\d{2}$/.test(a.fecha) ? "fecha debe ser YYYY-MM-DD." : a.desde && parseHHMM(a.desde) == null ? "desde debe ser HH:MM." : null),
+    run: async (a) => {
+      const meta = await pubMeta();
+      let lineId = null;
+      if (a.linea) { lineId = findLine(meta, a.linea); if (!lineId) return "No conozco la línea «" + a.linea + "»."; }
+      let ids = [];
+      if (a.numero_parada && meta.stops[a.numero_parada]) ids = [Number(a.numero_parada)];
+      else if (a.numero_parada && !a.parada) return "No existe la parada " + a.numero_parada + ".";
+      else ids = pubSearchStops(meta, a.parada, 8);
+      if (!ids.length) return "No encuentro la parada «" + (a.parada || a.numero_parada) + "». Prueba buscar_parada.";
+      if (ids.length > 2) return "Hay varias paradas que encajan; pide el número:\n" + ids.map((id) => "- Parada " + id + ": " + pubStopName(meta, id)).join("\n");
+      const now = madridNow();
+      const date = a.fecha || now.date;
+      const desde = a.desde ? parseHHMM(a.desde) : date === now.date ? now.min : 0;
+      const out = [];
+      for (const id of ids) {
+        const st = await gtfsStopTimes(id, date.replace(/-/g, ""));
+        if (!st) return "No tengo el horario programado para el " + date + " (el GTFS publicado no cubre esa fecha).";
+        const rows = [];
+        for (const lid in st.lines) {
+          if (lineId && Number(lid) !== lineId) continue;
+          const xs = st.lines[lid].filter((m) => m >= desde).slice(0, 8);
+          if (xs.length) rows.push({ n: pubLineName(meta, Number(lid)), first: xs[0], xs });
+        }
+        rows.sort((x, y) => x.first - y.first);
+        out.push("Parada " + id + " — " + pubStopName(meta, id) + " · " + date + (st.tipo ? " (" + st.tipo + ")" : "") + ", desde las " + fmt(desde) + ", horario programado:\n" +
+          (rows.length ? rows.map((r) => "- Línea " + r.n + ": " + r.xs.map(fmt).join(", ")).join("\n") : "- No hay más buses" + (lineId ? " de la línea " + pubLineName(meta, lineId) : "") + " ese día."));
+      }
+      return out.join("\n\n");
+    }
+  },
+  {
     name: "horario_linea",
     title: "Horario programado de una línea",
     description: "Scheduled departure times of an A Coruña city bus line from each terminus for a given date (not times at intermediate stops). Use for first/last bus questions or planning ahead.",
@@ -1544,7 +1742,7 @@ var PUB_TOOLS = [
       const lineId = findLine(meta, a.linea);
       if (!lineId) return "No conozco la línea «" + a.linea + "».";
       const date = a.fecha || madridNow().date;
-      const dep = await pubDepartures(lineId, date.replace(/-/g, ""));
+      const dep = await gtfsDepartures(lineId, date.replace(/-/g, "")) || await pubDepartures(lineId, date.replace(/-/g, ""));
       const info = meta.lines[lineId] || {};
       const desde = a.desde ? parseHHMM(a.desde) : null;
       const pick = (arr) => {
@@ -1556,7 +1754,7 @@ var PUB_TOOLS = [
       if (!ida.length && !vuelta.length) return "La línea " + n + " no tiene salidas" + (desde != null ? " a partir de las " + fmt(desde) : "") + " el " + date + ".";
       const block = (from, to, xs) => xs.length ? "Desde " + (from || "cabecera") + (to ? " hacia " + to : "") + ": " + xs.map(fmt).join(", ") : "";
       return ["Línea " + n + " — " + date + (dep.tipo ? " (" + dep.tipo + ")" : "") + ". Horas de salida desde cabecera:",
-        block(info.o, info.d, ida), block(info.d, info.o, vuelta)].filter(Boolean).join("\n");
+        block(dep.oIda || info.o, dep.dIda || info.d, ida), block(dep.oVuelta || info.d, dep.dVuelta || info.o, vuelta)].filter(Boolean).join("\n");
     }
   }
 ];
@@ -1564,7 +1762,7 @@ var PUB_TOOLS = [
 async function mcpPublic(req, env, url) {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: MCP_CORS });
   if (req.method !== "POST") return new Response("Method Not Allowed", { status: 405, headers: { allow: "POST, OPTIONS", ...MCP_CORS } });
-  if (pubRateLimited(req)) return rpcError(null, -32000, "Demasiadas peticiones, espera un minuto.", 429);
+  if (pubRateLimited(req)) return rpcError(null, -32000, "Servidor ocupado, prueba en un minuto.", 429);
   let msg;
   try { msg = await req.json(); } catch (e) { return rpcError(null, -32700, "Parse error", 400); }
   if (Array.isArray(msg) || !msg || msg.jsonrpc !== "2.0" || typeof msg.method !== "string") {
@@ -1580,7 +1778,7 @@ async function mcpPublic(req, env, url) {
         protocolVersion: MCP_VERSIONS.includes(asked) ? asked : MCP_VERSIONS[0],
         capabilities: { tools: { listChanged: false }, resources: { listChanged: false } },
         serverInfo: { name: "bus-coruna", title: "Bus A Coruña", version: "1.0.0" },
-        instructions: "Buses urbanos de A Coruña (iTranvías): paradas, tiempos de llegada en vivo y horarios programados. Si el usuario da un lugar vago, usa buscar_parada o paradas_cercanas primero. Recuerda tú (el cliente) sus paradas habituales; este servidor no guarda nada del usuario. Fuente no oficial: los tiempos pueden fallar."
+        instructions: "Buses urbanos de A Coruña (iTranvías): paradas, tiempos de llegada en vivo y horarios programados. Si el usuario da un lugar vago, usa buscar_parada o paradas_cercanas primero. Para tiempo real (próximos minutos) usa proximos_buses; para planificar o consultar otra hora, horario_parada. Recuerda tú (el cliente) sus paradas habituales; este servidor no guarda nada del usuario. Fuente no oficial: los tiempos pueden fallar."
       });
     }
     case "ping":
@@ -1727,6 +1925,22 @@ async function gtfsStopTimes(id, ymd) {
     if (set.size) lines[lid] = [...set].sort((a, b) => a - b);
   }
   return { tipo: day.tipo, lines };
+}
+
+// Salidas desde cabecera de una línea (como func=8), del GTFS. null si no cubre la fecha.
+async function gtfsDepartures(lineId, ymd) {
+  const day = await gtfsDay(ymd).catch(() => null);
+  if (!day) return null;
+  const l = await gtfsJSON("lines/" + lineId + ".json").catch(() => null);
+  if (!l) return null;
+  const pick = (d) => {
+    const set = new Set();
+    for (const p of day.pats) for (const m of (d && d.s && d.s[p]) || []) set.add(m);
+    return [...set].sort((a, b) => a - b);
+  };
+  // Sentidos del GTFS (direction_id 0 y 1) con su cabecera y destino reales, para nombrarlos bien.
+  const d0 = l.d["0"], d1 = l.d["1"];
+  return { tipo: day.tipo, ida: pick(d0), vuelta: pick(d1), oIda: d0 && d0.desde, dIda: d0 && d0.hacia, oVuelta: d1 && d1.desde, dVuelta: d1 && d1.hacia };
 }
 
 // Próximos buses según horario, con la forma de pubStop. Solo para cuando iTranvías no responde.

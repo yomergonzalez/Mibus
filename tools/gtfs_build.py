@@ -9,6 +9,7 @@ El GTFS se descarga del Punto de Acceso Nacional (nap.transportes.gob.es,
   gtfs/index.json        versión, tipos de día y qué tipos rigen cada fecha
   gtfs/meta.json         catálogo de respaldo, mismo formato que /api/meta
   gtfs/stops/<id>.json   horas de paso por línea y tipo de día
+  gtfs/lines/<id>.json   salidas desde cabecera por sentido y tipo de día
 
 Los IDs de parada y de línea del GTFS son los mismos que usa iTranvías.
 Las horas van en minutos desde las 00:00. Solo usa la biblioteca estándar.
@@ -120,6 +121,7 @@ def main(path):
         p = svc_pat.get(t['service_id'])
         if p is not None:
             trip_pat[tid] = renum[p]
+    first = {}  # trip_id -> (stop_sequence, stop_id, minutos) de la primera parada del viaje
     with z.open('stop_times.txt') as f:
         for r in csv.DictReader(io.TextIOWrapper(f, encoding='utf-8-sig')):
             p = trip_pat.get(r['trip_id'])
@@ -127,10 +129,23 @@ def main(path):
                 continue
             h, m, _ = (int(x) for x in (r['departure_time'] or r['arrival_time']).split(':'))
             times[r['stop_id']][trips[r['trip_id']]['route_id']][p].add(h * 60 + m)
+            seq = int(r['stop_sequence'])
+            if r['trip_id'] not in first or seq < first[r['trip_id']][0]:
+                first[r['trip_id']] = (seq, r['stop_id'], h * 60 + m)
+
+    # Salidas desde cabecera por línea y sentido (para horario_linea, sin pedir func=8)
+    deps = defaultdict(lambda: defaultdict(lambda: {'desde': defaultdict(int), 'hacia': defaultdict(int), 't': defaultdict(set)}))
+    for tid, (seq, sid, mins) in first.items():
+        t = trips[tid]
+        d = deps[t['route_id']][t['direction_id'] or '0']
+        d['desde'][sid] += 1
+        d['hacia'][(t.get('trip_headsign') or '').strip()] += 1
+        d['t'][trip_pat[tid]].add(mins)
 
     out = os.path.abspath(OUT)
-    shutil.rmtree(os.path.join(out, 'stops'), ignore_errors=True)
-    os.makedirs(os.path.join(out, 'stops'), exist_ok=True)
+    for sub in ('stops', 'lines'):
+        shutil.rmtree(os.path.join(out, sub), ignore_errors=True)
+        os.makedirs(os.path.join(out, sub), exist_ok=True)
 
     def dump(rel, obj):
         with open(os.path.join(out, rel), 'w', encoding='utf-8') as f:
@@ -150,6 +165,18 @@ def main(path):
             'l': {lid: {str(p): sorted(v) for p, v in sorted(pp.items())} for lid, pp in sorted(lines.items(), key=lambda x: int(x[0]))},
         })
         n += 1
+
+    for rid, dirs in deps.items():
+        r = routes.get(rid, {})
+        out_dirs = {}
+        for did, d in sorted(dirs.items()):
+            sid = max(d['desde'], key=d['desde'].get)
+            out_dirs[did] = {
+                'desde': stop_name(stops[sid]) if sid in stops else sid,
+                'hacia': max(d['hacia'], key=d['hacia'].get),
+                's': {str(p): sorted(v) for p, v in sorted(d['t'].items())},
+            }
+        dump(os.path.join('lines', rid + '.json'), {'id': int(rid), 'n': r.get('route_short_name', rid), 'd': out_dirs})
 
     meta = {'lines': {}, 'stops': {}, 'pos': {}}
     for rid, r in routes.items():

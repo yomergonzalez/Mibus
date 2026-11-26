@@ -56,6 +56,10 @@ main{max-width:640px;margin:0 auto;padding:10px 10px 14px;display:grid;gap:10px}
 .at{text-align:right;white-space:nowrap}
 .at b{display:block;font-size:15px;font-variant-numeric:tabular-nums}
 .at span{color:var(--mute);font-size:11px}
+.at b.live::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:#1a9f55;margin-right:5px;vertical-align:middle}
+.at b.old::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:#d38b00;margin-right:5px;vertical-align:middle}
+.at b.sched{color:var(--mute);font-style:italic}
+.at b.sched::before{content:"🕒";font-style:normal;font-size:.75em;margin-right:4px}
 .empty{color:var(--mute);padding:10px 0;border-top:1px solid var(--line);font-size:14px}
 .err{color:var(--red);font-size:14px;padding:6px 0}
 .edit{display:none;border-top:1px solid var(--line);padding:10px 0;gap:8px;flex-wrap:wrap;align-items:center}
@@ -144,7 +148,7 @@ async function getStop(id) {
     // El Worker devuelve "at" (cuándo se consultó iTranvías; puede venir de caché).
     // Los tiempos son relativos a ese momento, no a ahora.
     const at = j.at && j.at <= Date.now() ? j.at : Date.now();
-    return { at: at, lineas: j.buses ? (j.buses.lineas || []) : (j.lineas || []), prog: !!j.programado };
+    return { at: at, lineas: j.buses ? (j.buses.lineas || []) : (j.lineas || []), prog: !!j.programado, stale: !!j.stale };
   });
 }
 function getMeta() {
@@ -232,6 +236,8 @@ function render() {
   }).join('');
 }
 
+// Fuente de cada hora: ● verde en vivo, ● ámbar dato viejo, 🕒 horario programado.
+function src(b) { return b.prog ? 'sched' : b.old ? 'old' : 'live'; }
 function shortName(id) { return stopName(id).replace(/^(Rda\.|Av\.) de /, ''); }
 function renderList(allStops) {
   if (filt != null && !allStops.some((s) => s.id === filt)) filt = null;
@@ -250,7 +256,7 @@ function renderList(allStops) {
       for (const b of l.buses || []) {
         const t = mins(b.tiempo);
         if (t - el < -1) continue;
-        all.push({ linea: l.linea, fav: fav, left: Math.max(0, Math.round(t - el)), at: d.at + t * 60000, dist: metres(b.distancia), stop: s.id, prog: !!d.prog });
+        all.push({ linea: l.linea, fav: fav, left: Math.max(0, Math.round(t - el)), at: d.at + t * 60000, dist: metres(b.distancia), stop: s.id, prog: !!d.prog, old: !d.prog && !!(d.err || d.stale) });
       }
     }
   }
@@ -262,7 +268,7 @@ function renderList(allStops) {
     const li = lineInfo(first.linea);
     hero = '<section class="hero"><div class="chip" style="background:' + li.c + '">' + esc(li.n) + '</div><div class="mid"><div class="lbl">Próximo bus</div>' +
       (first.left <= 1 ? '<div class="big now">Llegando</div>' : '<div class="big">' + first.left + '<small>min</small></div>') +
-      '<div class="stp">' + esc(stopName(first.stop)) + '</div></div><div class="at"><b>' + hhmm(first.at) + '</b><span>' + (first.prog ? 'horario' : 'a ' + esc(fmtKm(first.dist))) + '</span></div></section>';
+      '<div class="stp">' + esc(stopName(first.stop)) + '</div></div><div class="at"><b class="' + src(first) + '">' + hhmm(first.at) + '</b><span>' + (first.prog ? 'horario' : 'a ' + esc(fmtKm(first.dist))) + '</span></div></section>';
   }
   const row = (b, cls) => {
     const li = lineInfo(b.linea);
@@ -270,7 +276,7 @@ function renderList(allStops) {
     return '<div class="row ' + cls + '"><div class="chip" style="background:' + li.c + '">' + esc(li.n) + '</div>' +
       '<div class="mid">' + (b.left <= 1 ? '<div class="min now">Llegando</div>' : '<div class="min">' + b.left + '<small>min</small>' + (b.fav ? '<span class="fav" aria-label="favorita">★</span>' : '') + '</div>') +
       '<div class="stp">' + esc(stopName(b.stop)) + '</div></div>' +
-      '<div class="at"><b>' + hhmm(b.at) + '</b><span>' + (b.prog ? 'horario' : 'a ' + esc(km)) + '</span></div></div>';
+      '<div class="at"><b class="' + src(b) + '">' + hhmm(b.at) + '</b><span>' + (b.prog ? 'horario' : 'a ' + esc(km)) + '</span></div></div>';
   };
   let rows = favs.slice(1, 8).map((b) => row(b, '')).join('');
   const otherRows = others.slice(0, 6).map((b) => row(b, 'other')).join('');
