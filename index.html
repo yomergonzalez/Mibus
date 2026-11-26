@@ -56,7 +56,9 @@ main{max-width:640px;margin:0 auto;padding:10px 10px 14px;display:grid;gap:10px}
 .at{text-align:right;white-space:nowrap}
 .at b{display:block;font-size:15px;font-variant-numeric:tabular-nums}
 .at span{color:var(--mute);font-size:11px}
-.at b.live::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:#1a9f55;margin-right:5px;vertical-align:middle}
+.at b.live::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:#1a9f55;margin-right:5px;vertical-align:middle;animation:pulse 2s ease-out infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(26,159,85,.55)}70%{box-shadow:0 0 0 6px rgba(26,159,85,0)}100%{box-shadow:0 0 0 0 rgba(26,159,85,0)}}
+@media (prefers-reduced-motion:reduce){.at b.live::before{animation:none}}
 .at b.old::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:#d38b00;margin-right:5px;vertical-align:middle}
 .at b.sched{color:var(--mute);font-style:italic}
 .at b.sched::before{content:"🕒";font-style:normal;font-size:.75em;margin-right:4px}
@@ -256,7 +258,7 @@ function renderList(allStops) {
       for (const b of l.buses || []) {
         const t = mins(b.tiempo);
         if (t - el < -1) continue;
-        all.push({ linea: l.linea, fav: fav, left: Math.max(0, Math.round(t - el)), at: d.at + t * 60000, dist: metres(b.distancia), stop: s.id, prog: !!d.prog, old: !d.prog && !!(d.err || d.stale) });
+        all.push({ linea: l.linea, fav: fav, left: Math.max(0, Math.round(t - el)), at: d.at + t * 60000, dist: metres(b.distancia), stop: s.id, prog: !!(d.prog || b.programado), old: !d.prog && !!(d.err || d.stale || b.sinSenal) });
       }
     }
   }

@@ -367,7 +367,7 @@ async function nextBuses(trip) {
         if (s.lines.indexOf(l.linea) < 0) continue;
         for (const b of l.buses || []) {
           const min = Math.round(parseMin(b.tiempo));
-          if (min >= s.walk) all.push({ line: LINE_NAMES[l.linea] || String(Math.floor(l.linea / 100)), min, stop: s.name, leave: min - s.walk, main: !!s.main, prog: !!d.programado });
+          if (min >= s.walk) all.push({ line: LINE_NAMES[l.linea] || String(Math.floor(l.linea / 100)), min, stop: s.name, leave: min - s.walk, main: !!s.main, prog: d.programado ? 'all' : b.programado ? 'part' : '' });
         }
       }
     } catch (e) {}
@@ -407,7 +407,7 @@ async function alexaCommute(trip, src = 'alexa') {
   if (!trip) trip = defaultTrip(src, NOW_MIN);
   const buses = await nextBuses(trip);
   if (!buses.length) return alexaSay('Ahora mismo no tengo buses a los que te dé tiempo a llegar, o iTranvías no responde. Prueba en un momento.');
-  const note = buses.some((x) => x.prog) ? PROG_NOTE : '';
+  const note = buses.some((x) => x.prog === 'all') ? PROG_NOTE : buses.some((x) => x.prog) ? PROG_PART : '';
   const main = buses.filter((x) => x.main);
   if (main.length) {
     const m = main[0], alt = buses.find((x) => !x.main && x.leave < m.leave);
@@ -449,9 +449,9 @@ function parseHHMM(v) {
   return h < 24 && mi < 60 ? h * 60 + mi : null;
 }
 function fmt(m) { m = ((m % 1440) + 1440) % 1440; return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); }
-function madridNow() {
+function madridNow(at) {
   const p = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Madrid', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
-    .formatToParts(new Date()).map((x) => [x.type, x.value]));
+    .formatToParts(at ? new Date(at) : new Date()).map((x) => [x.type, x.value]));
   return { date: p.year + '-' + p.month + '-' + p.day, min: Number(p.hour) * 60 + Number(p.minute) };
 }
 
@@ -688,14 +688,16 @@ async function alexaConsulta(intent, attrs = {}, src = 'alexa') {
   await Promise.all(stops.map(async (sid) => {
     try {
       const d = await pubStop(sid);
-      if (d.programado) prog = true;
+      if (d.programado) prog = 'all';
       const j = stopAsUpstream(d);
       traceUpstream(sid, j);
       const items = [];
       for (const l of (j.buses && j.buses.lineas) || []) {
         if (lineId && l.linea !== lineId) continue;
         const name = (meta.lines[l.linea] && meta.lines[l.linea].n) || String(l.linea);
-        const mins = (l.buses || []).map((b) => Math.round(parseMin(b.tiempo))).sort((a, b) => a - b).slice(0, lineId ? 3 : 2);
+        const picked = (l.buses || []).slice().sort((a, b) => parseMin(a.tiempo) - parseMin(b.tiempo)).slice(0, lineId ? 3 : 2);
+        if (!prog && picked.some((b) => b.programado)) prog = 'part';
+        const mins = picked.map((b) => Math.round(parseMin(b.tiempo)));
         if (mins.length) items.push({ name, first: mins[0], text: 'el ' + name.replace(/A$/, ' A') + ' ' + seq(mins) });
       }
       items.sort((a, b) => a.first - b.first);
@@ -710,7 +712,7 @@ async function alexaConsulta(intent, attrs = {}, src = 'alexa') {
     return alexaSay('Ahora mismo no hay buses próximos' + (lineId ? ' del ' + meta.lines[lineId].n : '') + ' en esa parada.');
   }
   parts.sort((a, b) => stops.indexOf(a.sid) - stops.indexOf(b.sid));
-  return alexaSay(parts.map((p) => p.text).join(' ') + (prog ? PROG_NOTE : ''));
+  return alexaSay(parts.map((p) => p.text).join(' ') + (prog === 'all' ? PROG_NOTE : prog ? PROG_PART : ''));
 }
 
 // ---------- Intents reutilizables (Alexa clásica, /alexa/test y MCP) ----------
@@ -774,9 +776,10 @@ async function uiBoards(meta, stops, opts = {}) {
       const allowed = opts.lines && opts.lines[sid];
       if (allowed && allowed.indexOf(l.linea) < 0) continue;
       const info = meta.lines[l.linea] || {};
-      for (const bus of (l.buses || []).slice(0, 3)) {
+      for (const bus of (l.buses || []).slice(0, 4)) {
         const min = Math.max(0, Math.round(parseMin(bus.tiempo) - elapsed));
-        out.push({ linea: pubLineName(meta, l.linea), color: info.c || null, min, hora: fmt(now + min), metros: Number(bus.distancia) || null });
+        const fuente = d.programado || bus.programado ? "horario" : bus.sinSenal ? "sinsenal" : d.stale ? "viejo" : "vivo";
+        out.push({ linea: pubLineName(meta, l.linea), color: info.c || null, min, hora: fmt(now + min), metros: Number(bus.distancia) || null, fuente });
       }
     }
     out.sort((x, y) => x.min - y.min);
@@ -839,7 +842,9 @@ footer{color:var(--tx3);font-size:11px;margin-top:8px}
 .opt.rec{background:var(--bg2);border-radius:8px;padding:8px;border-top:0;margin:2px -8px}
 .tag{display:inline-block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ok);margin-left:6px}
 .hrs{font-variant-numeric:tabular-nums;font-weight:600;font-size:14px;text-align:right}
-.live::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--ok);margin-right:6px;vertical-align:middle}
+.live::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--ok);margin-right:6px;vertical-align:middle;animation:pulse 2s ease-out infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(26,159,85,.55)}70%{box-shadow:0 0 0 6px rgba(26,159,85,0)}100%{box-shadow:0 0 0 0 rgba(26,159,85,0)}}
+@media (prefers-reduced-motion:reduce){.live::before{animation:none}}
 .old::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--warn);margin-right:6px;vertical-align:middle}
 .sched{color:var(--tx2);font-style:italic;font-weight:600}
 .sched::before{content:"🕒";font-style:normal;font-size:12px;margin-right:4px}
@@ -952,7 +957,7 @@ footer{color:var(--tx3);font-size:11px;margin-top:8px}
         var bg = b.color ? ' style="background:' + esc(/^#?[0-9a-f]{3,8}$/i.test(b.color) ? (b.color[0] === "#" ? b.color : "#" + b.color) : "#555") + '"' : "";
         h += '<div class="row"><span class="ln"' + bg + ">" + esc(b.linea) + "</span>";
         h += '<span class="to">' + (b.hacia ? "→ " + esc(b.hacia) : "") + (b.metros ? (b.hacia ? " · " : "") + (b.metros >= 1000 ? (b.metros / 1000).toFixed(1).replace(".", ",") + " km" : b.metros + " m") : "") + "</span>";
-        var src = p.programado ? " sched" : p.stale ? " old" : " live";
+        var src = p.programado || b.fuente === "horario" ? " sched" : p.stale || b.fuente === "sinsenal" || b.fuente === "viejo" ? " old" : " live";
         h += '<span class="right">' + (m <= 0 && !p.programado ? '<span class="min now' + src + '">llegando</span>' : '<span class="min' + src + '"><small>pasa </small>' + clock(gotAt + m * 60000) + "</span>");
         if (p.andando != null) h += leave(m, p.andando); else if (m > 0) h += '<span class="lv gone">en ' + m + " min</span>";
         h += "</span></div>";
@@ -1062,6 +1067,8 @@ function boardsText(title, boards) {
     if (!list.length) { out.push('  ' + (walk != null && (b.llegadas || []).length ? 'ningún bus al que llegues andando' : 'sin buses próximos')); continue; }
     for (const x of list) {
       let t = '  - Línea ' + x.linea + ': pasa ' + x.hora + ' (' + (x.min <= 0 ? 'llegando' : 'en ' + x.min + ' min') + ')';
+      if (!b.programado && x.fuente === 'horario') t += ' [según horario: iTranvías no lo está siguiendo]';
+      if (x.fuente === 'sinsenal') t += ' [sin señal: estimado con su último dato en vivo]';
       if (walk != null) {
         const lv = x.min - walk;
         t += ', salir ' + fmt(now + lv) + (lv <= 0 ? ' (¡ya!)' : ' (en ' + lv + ' min)');
@@ -1438,14 +1445,22 @@ function pubMeta() {
 var STALE_MAX = 15 * 60e3;
 var lastGood = new Map();
 
-function pubStop(id) {
+// Lo que ven todos (Alexa, MCP, panel, web): tiempo real + huecos rellenados con el horario.
+async function pubStop(id) {
+  const d = await pubStopRaw(id);
+  if (d.programado) return d;
+  try { return await fillFromSchedule(id, d); } catch (e) { return d; }
+}
+
+function pubStopRaw(id) {
   return pubMemo("stop:" + id, PUB_STOP_TTL, async () => {
     const shared = await stopCacheGet(id);
     if (shared && Date.now() - shared.at < PUB_STOP_TTL) return shared;
     try {
       const { r, j } = await upstreamJSON(API + "?dato=" + id + "&func=0", { headers: UPSTREAM_HEADERS, cache: "no-store" });
       if (!r.ok) throw new Error("iTranvías " + r.status);
-      const d = { at: Date.now(), lineas: (j.buses && j.buses.lineas) || [] };
+      const prev = lastGood.get(id) || shared;
+      const d = { at: Date.now(), lineas: withGhosts(prev, (j.buses && j.buses.lineas) || []) };
       lastGood.set(id, d);
       await stopCachePut(id, d);
       return d;
@@ -1458,6 +1473,62 @@ function pubStop(id) {
       throw e;
     }
   });
+}
+
+// iTranvías solo lista los buses que está siguiendo: uno que espera en cabecera o pierde el
+// GPS desaparece unos minutos. Dos remedios:
+// 1) withGhosts: si un bus visto en vivo desaparece cuando aún le faltaban > 2 min, se mantiene
+//    hasta 10 min con su hora estimada y sinSenal: true.
+// 2) fillFromSchedule: horas del horario (próximos 60 min) sin ningún bus en vivo cerca
+//    (de 3 min antes a 8 min después) se añaden con programado: true.
+var GHOST_MAX = 10 * 60e3;
+function withGhosts(prev, lineas) {
+  if (!prev || !prev.lineas) return lineas;
+  const now = Date.now();
+  const gone = (now - prev.at) / 60000;
+  const out = lineas.map((l) => ({ ...l, buses: (l.buses || []).slice() }));
+  for (const pl of prev.lineas) {
+    for (const b of pl.buses || []) {
+      if (b.programado) continue;
+      const left = parseMin(b.tiempo) - gone;
+      const lost = b.sinSenal ? b.desde : prev.at;
+      if (left <= 2 || now - lost > GHOST_MAX) continue;
+      let l = out.find((x) => x.linea === pl.linea);
+      const seen = l && l.buses.some((x) => Math.abs(parseMin(x.tiempo) - left) <= 3);
+      if (seen) continue;
+      if (!l) { l = { ...pl, buses: [] }; out.push(l); }
+      l.buses.push({ tiempo: Math.round(left), sinSenal: true, desde: lost });
+    }
+  }
+  for (const l of out) l.buses.sort((a, b) => parseMin(a.tiempo) - parseMin(b.tiempo));
+  return out;
+}
+
+async function fillFromSchedule(id, d) {
+  const t = madridNow(d.at);
+  const st = await gtfsStopTimes(id, t.date.replace(/-/g, ""));
+  if (!st) return d;
+  const lineas = d.lineas.map((l) => ({ ...l, buses: (l.buses || []).slice() }));
+  let added = false;
+  for (const lid in st.lines) {
+    // Desde 2 min: un bus del horario "llegando" que iTranvías no ve probablemente ya pasó.
+    const slots = st.lines[lid].filter((m) => m - t.min >= 2 && m - t.min <= 60);
+    if (!slots.length) continue;
+    let l = lineas.find((x) => x.linea === Number(lid));
+    const live = l ? l.buses.map((b) => parseMin(b.tiempo)) : [];
+    const used = new Set();
+    for (const m of slots) {
+      const rel = m - t.min;
+      const k = live.findIndex((x, i) => !used.has(i) && x >= rel - 3 && x <= rel + 8);
+      if (k >= 0) { used.add(k); continue; }
+      if (!l) { l = { linea: Number(lid), buses: [] }; lineas.push(l); }
+      l.buses.push({ tiempo: rel, programado: true });
+      added = true;
+    }
+  }
+  if (!added) return d;
+  for (const l of lineas) l.buses.sort((a, b) => parseMin(a.tiempo) - parseMin(b.tiempo));
+  return { ...d, lineas };
 }
 
 // Pasa un dato viejo a "ahora": resta los minutos transcurridos y quita los buses que ya pasaron.
@@ -1554,17 +1625,17 @@ async function pubLiveText(meta, sid, lineId, max = 3) {
   for (const l of d.lineas) {
     if (lineId && l.linea !== lineId) continue;
     const mins = (l.buses || [])
-      .map((b) => Math.max(0, Math.round(parseMin(b.tiempo) - elapsed)))
-      .sort((a, b) => a - b)
+      .map((b) => ({ m: Math.max(0, Math.round(parseMin(b.tiempo) - elapsed)), tag: d.programado ? "" : b.programado ? " según horario" : b.sinSenal ? " sin señal, estimado" : "" }))
+      .sort((a, b) => a.m - b.m)
       .slice(0, max);
     if (mins.length) items.push({ n: pubLineName(meta, l.linea), mins });
   }
-  items.sort((a, b) => a.mins[0] - b.mins[0]);
+  items.sort((a, b) => a.mins[0].m - b.mins[0].m);
   if (!items.length) {
     return head + ": no hay buses próximos" + (lineId ? " de la línea " + pubLineName(meta, lineId) : "") + ".";
   }
   return head + "\n" + items.map((x) =>
-    "- Línea " + x.n + ": " + x.mins.map((m) => (m <= 1 ? "llegando" : m + " min (" + fmt(now + m) + ")")).join(", ")
+    "- Línea " + x.n + ": " + x.mins.map((y) => (y.m <= 1 ? "llegando" : y.m + " min (" + fmt(now + y.m) + (y.tag ? "," + y.tag : "") + ")")).join(", ")
   ).join("\n");
 }
 
@@ -1894,6 +1965,7 @@ async function budgetTake() {
 var GTFS_BASE = "https://yomergonzalez.github.io/Mibus/gtfs/";
 var GTFS_TTL = 24 * 3600e3;
 var PROG_NOTE = " Es el horario programado: iTranvías no responde ahora mismo.";
+var PROG_PART = " Alguna de esas horas es del horario programado, no del tiempo real.";
 
 function gtfsJSON(path) {
   return pubMemo("gtfs:" + path, 10 * 60e3, () => sharedCache("gtfs:" + path, GTFS_TTL, async () => {
