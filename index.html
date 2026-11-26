@@ -1018,7 +1018,7 @@ function stopGroups(list, prev) {
   const g = W.lib.P.porParadaDeSubida(list).map((x) => {
     const best = x.opciones.reduce((a, o) => (o.total < a.total ? o : a));
     return { id: x.parada.id, nombre: x.parada.nombre, lineas: x.opciones.map((o) => o.linea), best };
-  }).sort((a, b) => a.best.total - b.best.total);
+  }).sort((a, b) => a.best.total - b.best.total || a.best.minAndandoIni - b.best.minAndandoIni);
   const out = g.filter((x) => x.best.total <= (g[0] ? g[0].best.total : 0) + 10).slice(0, 6);
   const sel = new Set();
   if (prev && prev.length) { for (const x of out) if (prev.some((s) => String(s.id) === x.id)) sel.add(x.id); }
@@ -1029,7 +1029,15 @@ function stopGroups(list, prev) {
       if (x.lineas.some((l) => !seen.has(l))) { sel.add(x.id); x.lineas.forEach((l) => seen.add(l)); }
     }
   }
-  return { list: out, sel };
+  return { list: out, sel, tag: bestTag(out) };
+}
+// Etiqueta de la primera opción: «Más rápido» solo si gana por 2 min o más;
+// si empata en tiempo pero se anda menos hasta la parada, «Menos andar»; si no, nada.
+function bestTag(out) {
+  if (out.length < 2) return '';
+  const a = out[0].best, tied = out.slice(1).filter((x) => x.best.total - a.total < 2);
+  if (!tied.length) return 'Más rápido';
+  return tied.every((x) => a.minAndandoIni < x.best.minAndandoIni) ? 'Menos andar' : '';
 }
 function wCompute() {
   const P = W.lib.P, r = { radioOrigenM: 600, radioDestinoM: 400, inclusoSiAndarEsMejor: !!W.anyway };
@@ -1140,7 +1148,7 @@ function wRender() {
       const card = (dir, x) => {
         const on = W[dir].sel.has(x.id), o = x.best;
         return '<button class="opt" data-g="' + dir + '|' + esc(x.id) + '" aria-pressed="' + on + '"><span class="box">' + (on ? ICON_CHECK : '') + '</span><span>' +
-          '<span class="h">' + chipsOf(x.lineas) + (x === W[dir].list[0] ? '<span class="best">Más rápido</span>' : '') + '<em>' + o.total + ' min</em></span>' +
+          '<span class="h">' + chipsOf(x.lineas) + (x === W[dir].list[0] && W[dir].tag ? '<span class="best">' + W[dir].tag + '</span>' : '') + '<em>' + o.total + ' min</em></span>' +
           '<b>' + esc(x.nombre) + '</b><small>' + o.minAndandoIni + ' min a pie · ' + o.minBus + ' en bus · bajas en ' + esc(o.baja.nombre) + '</small></span></button>';
       };
       const n = W.ida.sel.size;
