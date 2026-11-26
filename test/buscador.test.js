@@ -77,3 +77,25 @@ test('de punta a punta: «corte» → El Corte Inglés → el 12 y el 14 desde c
   const lineas = ops.map((o) => o.nombreLinea);
   assert.ok(lineas.includes('12') && lineas.includes('14'), lineas.join(','));
 });
+
+test('con número: la calle sin portal pasa a «Calle, N» en su sitio aproximado', () => {
+  const meta = require('../gtfs/meta.json');
+  assert.deepEqual(B.conNumero('ronda 200'), { calle: 'ronda', num: 200 });
+  assert.equal(B.conNumero('ronda'), null);
+  const rem = [
+    { nombre: 'Ronda de Outeiro', detalle: 'Os Mallos', tipo: 'calle', pos: [43.361, -8.4215] },
+  ];
+  const r = B.mezclar('ronda 200', rem, meta);
+  assert.equal(r[0].nombre, 'Ronda de Outeiro, 200');
+  assert.equal(r[0].tipo, 'direccion');
+  // Entre «Rda. de Outeiro, 172» y «…, 212» (lado par).
+  assert.ok(r[0].pos[0] > 43.3562 && r[0].pos[0] < 43.3576, String(r[0].pos));
+  // Número fuera de la calle: se queda la calle, avisando.
+  const s = B.mezclar('outeiro 9999', rem, meta);
+  assert.equal(s[0].nombre, 'Ronda de Outeiro');
+  assert.match(s[0].detalle, /no encontramos el 9999/);
+  // Si OpenStreetMap ya tiene el portal, no se toca.
+  const t = B.mezclar('ronda 200', [{ nombre: 'Ronda de Outeiro, 200', detalle: '', tipo: 'direccion', pos: [43.357, -8.418] }].concat(rem), meta);
+  assert.equal(t.filter((x) => /200/.test(x.nombre)).length, 1);
+  assert.ok(!t.some((x) => x.aprox));
+});

@@ -65,13 +65,77 @@
     return out.slice(0, max || 3);
   }
 
+  // «Rda. de Outeiro» y «Ronda de Outeiro» → «outeiro»: sin el tipo de vía, abreviaturas ni artículos.
+  const TIPOS_VIA = new Set(['ronda', 'rda', 'avenida', 'avda', 'av', 'rua', 'r', 'calle', 'c', 'praza', 'pza', 'plaza', 'pr', 'paseo', 'pso',
+    'travesia', 'trav', 'camino', 'cmno', 'glorieta', 'glor', 'estrada', 'ctra', 'carretera', 'de', 'da', 'do', 'das', 'dos', 'del', 'la', 'el', 'los', 'las', 'os', 'as', 'a', 'o']);
+  function nucleoCalle(nombre) {
+    return norm(nombre).split(' ').filter((w) => w && !TIPOS_VIA.has(w)).join(' ');
+  }
+
+  /** Número de portal al final de la búsqueda («ronda 200» → { calle: 'ronda', num: 200 }). */
+  function conNumero(q) {
+    const m = /^(.*?)[\s,]*(?:n(?:º|o|um)?\.?\s*)?(\d{1,4})\s*[a-z]?$/i.exec(String(q || '').trim());
+    if (!m || !norm(m[1])) return null;
+    return { calle: m[1], num: Number(m[2]) };
+  }
+
+  /**
+   * Posición aproximada de un portal usando las paradas numeradas de la misma calle
+   * («Rda. de Outeiro, 212», «…, 172»): se interpola entre las dos que lo rodean,
+   * con las del mismo lado (pares o impares) si hay bastantes. null si no se puede.
+   */
+  function portal(calle, num, meta) {
+    if (!meta || !meta.stops) return null;
+    const nucleo = nucleoCalle(calle);
+    if (!nucleo) return null;
+    const pts = [];
+    for (const id of Object.keys(meta.stops)) {
+      const m = /^(.*),\s*(\d{1,4})\s*$/.exec(meta.stops[id]);
+      const pos = meta.pos && meta.pos[id];
+      if (m && pos && nucleoCalle(m[1]) === nucleo) pts.push({ n: Number(m[2]), pos });
+    }
+    const lado = pts.filter((x) => x.n % 2 === num % 2);
+    const usa = (lado.length >= 2 ? lado : pts).sort((a, b) => a.n - b.n);
+    if (usa.length < 2) return null;
+    const ini = usa[0], fin = usa[usa.length - 1];
+    if (num < ini.n - 20 || num > fin.n + 20) return null;
+    if (num <= ini.n) return ini.pos;
+    if (num >= fin.n) return fin.pos;
+    let i = 0;
+    while (usa[i + 1].n < num) i++;
+    const a = usa[i], b = usa[i + 1], t = b.n === a.n ? 0 : (num - a.n) / (b.n - a.n);
+    return [Math.round((a.pos[0] + (b.pos[0] - a.pos[0]) * t) * 1e6) / 1e6, Math.round((a.pos[1] + (b.pos[1] - a.pos[1]) * t) * 1e6) / 1e6];
+  }
+
+  /**
+   * Si escribes un número y el buscador solo devuelve la calle (OpenStreetMap no tiene ese
+   * portal), la fila lleva el número: «Ronda de Outeiro, 200», en su sitio aproximado si hay
+   * paradas numeradas en esa calle; si no, la calle avisa de que no sabemos dónde cae el número.
+   */
+  function conPortal(q, remotos, meta) {
+    const c = conNumero(q);
+    if (!c || !remotos || !remotos.length) return remotos || [];
+    const ya = remotos.some((r) => r.tipo === 'direccion' && new RegExp('\\b' + c.num + '\\b').test(r.nombre));
+    if (ya) return remotos;
+    const out = [];
+    for (const r of remotos) {
+      if (r.tipo !== 'calle' || !encaja(c.calle, r.nombre)) { out.push(r); continue; }
+      const pos = portal(r.nombre, c.num, meta);
+      if (pos) out.push({ nombre: r.nombre + ', ' + c.num, detalle: 'Ubicación aproximada' + (r.detalle && r.detalle !== 'Calle' ? ' · ' + r.detalle : ''), tipo: 'direccion', pos, aprox: true });
+      else out.push(Object.assign({}, r, { detalle: 'Calle entera · no encontramos el ' + c.num }));
+    }
+    // Las que llevan tu número, primero.
+    return out.filter((r) => r.aprox).concat(out.filter((r) => !r.aprox));
+  }
+
   /**
    * Junta populares + remotos + paradas, quitando repetidos: mismo nombre (o uno contenido en
    * el otro) a menos de 400 m. Así «El Corte Inglés» no sale dos veces aunque OpenStreetMap
    * lo sitúe algo distinto que la lista de populares.
    */
   function mezclar(q, remotos, meta, max) {
-    const todos = populares(q).concat(remotos || [], paradas(q, meta));
+    remotos = conPortal(q, remotos, meta);
+    const todos = remotos.filter((r) => r.aprox).concat(populares(q), remotos.filter((r) => !r.aprox), paradas(q, meta));
     const out = [];
     for (const r of todos) {
       const rep = out.some((o) => distM(o.pos, r.pos) < 400 && (norm(o.nombre) === norm(r.nombre) || encaja(o.nombre, r.nombre) || encaja(r.nombre, o.nombre)));
@@ -107,5 +171,5 @@
     return mezclar(q, await remoto(q, opts), opts.meta, opts.max);
   }
 
-  return { POPULARES, populares, paradas, mezclar, remoto, buscar, norm, encaja };
+  return { POPULARES, populares, paradas, mezclar, remoto, buscar, norm, encaja, conNumero, portal, conPortal };
 });

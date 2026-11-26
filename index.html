@@ -911,10 +911,24 @@ function stopGroups(list, prev) {
   return { list: out, sel };
 }
 function wCompute() {
-  const P = W.lib.P, r = { radioOrigenM: 600, radioDestinoM: 400 };
+  const P = W.lib.P, r = { radioOrigenM: 600, radioDestinoM: 400, inclusoSiAndarEsMejor: !!W.anyway };
   W.ida = stopGroups(P.opcionesDirectas(W.origen.pos, W.destino.pos, r), W.trip && W.trip.ida);
   W.vta = stopGroups(P.opcionesDirectas(W.destino.pos, W.origen.pos, r), W.trip && W.trip.vuelta);
   W.opts = W.ida.list;
+  // Para explicar por qué no sale nada: lo que se tarda andando y si hay bus directo aunque sea más lento.
+  W.walkM = P.distM(W.origen.pos, W.destino.pos);
+  W.walkMin = P.minAndando(W.walkM);
+  W.slower = W.opts.length || W.anyway ? 0 : P.opcionesDirectas(W.origen.pos, W.destino.pos, Object.assign({}, r, { inclusoSiAndarEsMejor: true })).length;
+}
+// «a 500 m» o «a 1,2 km», en línea recta y redondeado.
+function wDist(m) { return m < 1000 ? Math.max(10, Math.round(m / 10) * 10) + ' m' : (Math.round(m / 100) / 10).toString().replace('.', ',') + ' km'; }
+function wEmpty() {
+  const lejos = '<button class="ghost" data-a="dest">Elegir otro destino</button>';
+  const calle = W.destino.tipo === 'calle' ? '<p class="note">' + esc(W.destino.nombre) + ' es una calle entera y hemos tomado el tramo más cercano a ti. Si vas a un número concreto, escríbelo con la calle completa (por ejemplo, «Ronda de Outeiro 200»).</p>' : '';
+  if (W.slower) return '<div class="wcard"><b>Andando llegas antes</b><p class="note">Está a ' + wDist(W.walkM) + ', unos ' + W.walkMin + ' min a pie. En bus tardarías más, contando lo que andas hasta la parada y desde ella.</p></div>' + calle +
+    '<div class="wfoot"><button class="bigbtn" data-a="anyway">Ver los buses igualmente</button></div>' + lejos;
+  if (W.walkMin <= 15) return '<div class="wcard"><b>Mejor andando</b><p class="note">Está a ' + wDist(W.walkM) + ', unos ' + W.walkMin + ' min a pie, y no hay ningún bus directo que te acerque.</p></div>' + calle + lejos;
+  return '<div class="wcard"><b>No hay ningún bus directo hasta aquí</b><p class="note">Este viaje necesita transbordo. Lo añadiremos pronto. Mientras, prueba con un destino cercano.</p></div>' + calle + lejos;
 }
 function chosenStops(d) { return d.list.filter((x) => d.sel.has(x.id)).map((x) => ({ id: Number(x.id), lines: x.lineas.map(Number) })); }
 function wSave() {
@@ -997,10 +1011,11 @@ function wRender() {
     if (!W.locating && !W.origen) h += '<button class="ghost" data-a="type">Prefiero escribir mi calle</button>';
   } else if (W.step === 2) h = wSearchHTML(false);
   else {
-    h = '<div><h2 id="wt">Así llegas a ' + esc(W.destino.nombre) + '</h2><p class="lead">Hemos marcado las paradas más rápidas con bus directo, para ir y para volver. Toca una para quitarla o añadirla.</p></div>';
+    h = '<div><h2 id="wt">Así llegas a ' + esc(W.destino.nombre) + '</h2>' + (W.opts && !W.opts.length ? '' : '<p class="lead">Hemos marcado las paradas más rápidas con bus directo, para ir y para volver. Toca una para quitarla o añadirla.</p>') + '</div>';
     if (!W.opts) h += '<p class="note">' + esc(W.err || 'Calculando…') + '</p>';
-    else if (!W.opts.length) h += '<div class="wcard"><b>No hay ningún bus directo hasta aquí</b><p class="note">Este viaje necesita transbordo. Lo añadiremos pronto. Mientras, prueba con un destino cercano.</p></div><button class="ghost" data-a="dest">Elegir otro destino</button>';
+    else if (!W.opts.length) h += wEmpty();
     else {
+      if (W.anyway) h += '<p class="note">Andando tardas unos ' + W.walkMin + ' min. Estas son las opciones en bus, aunque tarden más.</p>';
       const card = (dir, x) => {
         const on = W[dir].sel.has(x.id), o = x.best;
         return '<button class="opt" data-g="' + dir + '|' + esc(x.id) + '" aria-pressed="' + on + '"><span class="box">' + (on ? ICON_CHECK : '') + '</span><span>' +
@@ -1028,12 +1043,13 @@ $('wb').onclick = (e) => {
   if (a === 'next') { W.step = 2; W.q = ''; wRender(); }
   else if (a === 'type') { W.mode = 'type'; W.origen = null; W.q = ''; W.err = ''; wRender(); }
   else if (a === 'loc') wLocate();
-  else if (a === 'dest') { W.step = 2; W.q = ''; W.opts = null; wRender(); }
+  else if (a === 'dest') { W.step = 2; W.q = ''; W.opts = null; W.anyway = false; wRender(); }
+  else if (a === 'anyway') { W.anyway = true; wCompute(); wRender(); $('wiz').scrollTop = 0; }
   else if (a === 'save') wSave();
   else if (b.dataset.k != null) {
     const r = W.res[Number(b.dataset.k)]; if (!r) return;
     if (W.step === 1) { W.origen = { nombre: 'Casa', pos: r.pos, label: r.nombre }; W.mode = 'loc'; W.q = ''; wRender(); }
-    else { W.destino = { nombre: r.nombre, pos: r.pos }; W.nombre = r.nombre; W.step = 3; W.opts = null; if (W.lib) wCompute(); wRender(); }
+    else { W.destino = { nombre: r.nombre, pos: r.pos, tipo: r.tipo }; W.nombre = r.nombre; W.step = 3; W.opts = null; W.anyway = false; if (W.lib) wCompute(); wRender(); }
   } else if (b.dataset.g) {
     const [dir, id] = b.dataset.g.split('|'), sel = W[dir].sel;
     if (sel.has(id)) sel.delete(id); else sel.add(id);
