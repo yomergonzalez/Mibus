@@ -150,6 +150,10 @@ main{max-width:640px;margin:0 auto;padding:10px 10px 14px;display:grid;gap:10px}
 .t.sched{font-style:italic;font-weight:600;color:var(--mute)}
 .t.sched::before{content:"";width:12px;height:12px;margin-right:5px;background:currentColor;-webkit-mask:var(--clk) center/contain no-repeat;mask:var(--clk) center/contain no-repeat}
 :root{--clk:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 7v5l3 2'/%3E%3C/svg%3E");--pin:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2'%3E%3Cpath d='M20 10c0 5-5.5 10.2-7.4 11.8a1 1 0 0 1-1.2 0C9.5 20.2 4 15 4 10a8 8 0 0 1 16 0'/%3E%3Ccircle cx='12' cy='10' r='3'/%3E%3C/svg%3E")}
+.pinb{flex:none;width:44px;height:44px;margin:-10px -10px -10px -2px;border:0;border-radius:12px;background:transparent;color:var(--mute);display:grid;place-items:center}
+.pinb[aria-pressed=true]{color:var(--red)}.pinb[aria-pressed=true] svg{fill:currentColor}
+.stop.pinned{box-shadow:0 0 0 2px var(--red)}
+.then{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.then>span{font-size:13px;color:var(--mute);font-weight:600;margin-right:2px}
 .none{padding:12px 14px;color:var(--mute);font-size:14px;border-top:1px solid var(--line)}.none.err{color:var(--red)}
 .missed{background:var(--card);border-radius:18px;overflow:hidden}
 .missed summary{list-style:none;display:flex;align-items:center;gap:10px;padding:10px 14px;min-height:52px;cursor:pointer;color:var(--mute)}
@@ -414,6 +418,7 @@ const ICON = {
   pin: '<svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10c0 5-5.5 10.2-7.4 11.8a1 1 0 0 1-1.2 0C9.5 20.2 4 15 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg>',
   walk: '<svg class="ic" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="13" cy="4" r="2"/><path d="m9 20 3-6 3 3v4"/><path d="m6 12 3-4 4 1 3 3h3"/></svg>',
   nav: '<svg class="ic" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>',
+  pinb: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg>',
   chev: '<svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>'
 };
 // Cuándo salir para el bus grande: con ubicación, «Sal en X min»; sin ella, botón que la pide explicando para qué.
@@ -463,17 +468,25 @@ function renderList(stops) {
   }
   all.sort((a, b) => a.left - b.left || a.at - b.at);
   const favs = all.filter((b) => b.fav);
+  // Parada fijada (por trayecto y sentido): va la primera y el grande es su próximo bus.
+  const pinId = cfg.pin && cfg.pin[tab];
+  const pinned = stops.some((s) => s.id === pinId) ? pinId : null;
+  const atPin = pinned == null ? [] : (favs.some((b) => b.stop === pinned) ? favs : all).filter((b) => b.stop === pinned && !b.miss);
   // Con ubicación, el grande es el primero al que llegas andando.
-  const first = favs.find((b) => !b.miss) || favs[0];
+  const first = atPin[0] || favs.find((b) => !b.miss) || favs[0];
+  const fromPin = !!atPin[0];
+  // Después del grande, las siguientes de la misma línea en la misma parada.
+  const then = first ? all.filter((b) => b !== first && !b.miss && b.linea === first.linea && b.stop === first.stop).slice(0, 3) : [];
   const hereOn = all.some((b) => b.walk != null);
   let hero = '';
   if (first) {
     const li = lineInfo(first.linea);
-    hero = '<section class="hero"><div class="lbl">' + (hereOn && !first.miss ? 'Próximo al que llegas' : 'Próximo bus') + '</div>' +
+    hero = '<section class="hero"><div class="lbl">' + (fromPin ? 'Próximo en tu parada fijada' : hereOn && !first.miss ? 'Próximo al que llegas' : 'Próximo bus') + '</div>' +
       '<div class="hm"><div class="chip" style="background:' + li.c + '">' + esc(li.n) + '</div>' +
       '<div class="when"><small>Pasa a las</small><b class="big ' + src(first) + '">' + hhmm(first.at) + '</b>' + tag(first) + '</div>' +
       (first.left <= 1 && !first.prog ? '<span class="in now">Llegando</span>' : '<span class="in">en ' + first.left + ' min</span>') + '</div>' +
-      '<div class="stp">' + esc(stopName(first.stop)) + '</div>' + leaveBox(first) + '</section>';
+      '<div class="stp">' + esc(stopName(first.stop)) + '</div>' +
+      (then.length ? '<div class="then"><span>Luego</span>' + then.map(tchip).join('') + '</div>' : '') + leaveBox(first) + '</section>';
   }
   const groups = stops.map((s) => {
     const bs = all.filter((b) => b.stop === s.id && !b.miss);
@@ -484,7 +497,7 @@ function renderList(stops) {
     const lead = bs.find((b) => b.fav) || bs[0];
     const key = lead ? lead.left : Infinity;
     return { s: s, lines: lines, lead: lead, key: key, missed: all.some((b) => b.stop === s.id && b.miss) };
-  }).sort((a, b) => a.key - b.key);
+  }).sort((a, b) => ((b.s.id === pinned) - (a.s.id === pinned)) || a.key - b.key);
   const card = (g) => {
     const d = data[g.s.id];
     let body;
@@ -495,7 +508,9 @@ function renderList(stops) {
       const li = lineInfo(x.l);
       return '<div class="ln' + (x.fav ? '' : ' other') + '"><div class="chip" style="background:' + li.c + '">' + esc(li.n) + '</div><div class="ts">' + x.list.map(tchip).join('') + '</div></div>';
     }).join('');
-    return '<section class="stop"><h3>' + ICON.pin + '<span class="nm">' + esc(stopName(g.s.id)) + '</span>' + goShort(g.lead && g.lead.fav ? g.lead : null) + '</h3>' + body + '</section>';
+    const on = g.s.id === pinned;
+    return '<section class="stop' + (on ? ' pinned' : '') + '"><h3>' + ICON.pin + '<span class="nm">' + esc(shortName(g.s.id)) + '</span>' + goShort(g.lead && g.lead.fav ? g.lead : null) +
+      (stops.length > 1 ? '<button class="pinb" data-pin="' + g.s.id + '" aria-pressed="' + on + '" aria-label="' + (on ? 'Dejar de fijar ' : 'Fijar arriba ') + esc(stopName(g.s.id)) + '">' + ICON.pinb + '</button>' : '') + '</h3>' + body + '</section>';
   };
   const missed = favs.filter((b) => b.miss);
   let missHtml = '';
@@ -635,6 +650,14 @@ $('list').onclick = (e) => {
   const b = e.target.closest('button'); if (!b) return;
   if (b.dataset.a === 'wizard') { openWizard({}); return; }
   if (b.dataset.a === 'loc') { locDenied = false; autoTab(); return; }
+  if (b.dataset.pin) {
+    const id = Number(b.dataset.pin);
+    cfg.pin = cfg.pin || {};
+    cfg.pin[tab] = cfg.pin[tab] === id ? null : id;
+    save(); render();
+    const again = $('list').querySelector('[data-pin="' + id + '"]'); if (again) again.focus();
+    return;
+  }
   if (b.dataset.f != null) { filt = b.dataset.f ? Number(b.dataset.f) : null; manualFilt = true; render(); return; }
   if (b.dataset.rm != null) { cfg[tab].splice(Number(b.dataset.rm), 1); save(); render(); return; }
   if (b.dataset.l) {
