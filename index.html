@@ -124,7 +124,7 @@ async function tryFetch(url, ms) {
   finally { clearTimeout(t); }
 }
 async function getJSON(direct, viaProxy) {
-  if (PROXY) { try { return await tryFetch(PROXY.replace(/\/$/, "") + viaProxy, 6000); } catch (e) {} }
+  if (PROXY && viaProxy) { try { return await tryFetch(PROXY.replace(/\/$/, "") + viaProxy, 6000); } catch (e) {} }
   const known = ROUTES.find((r) => r.k === best);
   if (known) { try { return await tryFetch(known.f(direct), 5000); } catch (e) {} }
   const others = ROUTES.filter((r) => r !== known);
@@ -133,13 +133,18 @@ async function getJSON(direct, viaProxy) {
     return j;
   }))).catch(() => { throw new Error("sin conexión"); });
 }
-function getStop(id) {
-  return getJSON(API + "?dato=" + id + "&func=0", "/api/stop?id=" + id).then((j) => {
+async function getStop(id) {
+  const direct = API + "?dato=" + id + "&func=0";
+  let j = await getJSON(direct, "/api/stop?id=" + id);
+  // Si el Worker solo tiene el horario programado, probar en vivo por los proxies públicos
+  // (salen con otra IP y no gastan el cupo del Worker).
+  if (j && j.programado) { try { const live = await getJSON(direct, null); if (live && live.buses) j = live; } catch (e) {} }
+  return Promise.resolve(j).then((j) => {
     if (j.error) throw new Error(j.error);
     // El Worker devuelve "at" (cuándo se consultó iTranvías; puede venir de caché).
     // Los tiempos son relativos a ese momento, no a ahora.
     const at = j.at && j.at <= Date.now() ? j.at : Date.now();
-    return { at: at, lineas: j.buses ? (j.buses.lineas || []) : (j.lineas || []) };
+    return { at: at, lineas: j.buses ? (j.buses.lineas || []) : (j.lineas || []), prog: !!j.programado };
   });
 }
 function getMeta() {
@@ -245,7 +250,7 @@ function renderList(allStops) {
       for (const b of l.buses || []) {
         const t = mins(b.tiempo);
         if (t - el < -1) continue;
-        all.push({ linea: l.linea, fav: fav, left: Math.max(0, Math.round(t - el)), at: d.at + t * 60000, dist: metres(b.distancia), stop: s.id });
+        all.push({ linea: l.linea, fav: fav, left: Math.max(0, Math.round(t - el)), at: d.at + t * 60000, dist: metres(b.distancia), stop: s.id, prog: !!d.prog });
       }
     }
   }
@@ -257,7 +262,7 @@ function renderList(allStops) {
     const li = lineInfo(first.linea);
     hero = '<section class="hero"><div class="chip" style="background:' + li.c + '">' + esc(li.n) + '</div><div class="mid"><div class="lbl">Próximo bus</div>' +
       (first.left <= 1 ? '<div class="big now">Llegando</div>' : '<div class="big">' + first.left + '<small>min</small></div>') +
-      '<div class="stp">' + esc(stopName(first.stop)) + '</div></div><div class="at"><b>' + hhmm(first.at) + '</b><span>a ' + esc(fmtKm(first.dist)) + '</span></div></section>';
+      '<div class="stp">' + esc(stopName(first.stop)) + '</div></div><div class="at"><b>' + hhmm(first.at) + '</b><span>' + (first.prog ? 'horario' : 'a ' + esc(fmtKm(first.dist))) + '</span></div></section>';
   }
   const row = (b, cls) => {
     const li = lineInfo(b.linea);
@@ -265,7 +270,7 @@ function renderList(allStops) {
     return '<div class="row ' + cls + '"><div class="chip" style="background:' + li.c + '">' + esc(li.n) + '</div>' +
       '<div class="mid">' + (b.left <= 1 ? '<div class="min now">Llegando</div>' : '<div class="min">' + b.left + '<small>min</small>' + (b.fav ? '<span class="fav" aria-label="favorita">★</span>' : '') + '</div>') +
       '<div class="stp">' + esc(stopName(b.stop)) + '</div></div>' +
-      '<div class="at"><b>' + hhmm(b.at) + '</b><span>a ' + esc(km) + '</span></div></div>';
+      '<div class="at"><b>' + hhmm(b.at) + '</b><span>' + (b.prog ? 'horario' : 'a ' + esc(km)) + '</span></div></div>';
   };
   let rows = favs.slice(1, 8).map((b) => row(b, '')).join('');
   const otherRows = others.slice(0, 6).map((b) => row(b, 'other')).join('');
@@ -337,7 +342,8 @@ function tick() {
     // Edad real del dato más viejo de la pestaña (no de cuándo pulsaste Actualizar)
     const ats = cfg[tab].map((x) => data[x.id] && data[x.id].at).filter(Boolean);
     const s = Math.round((Date.now() - (ats.length ? Math.min.apply(null, ats) : lastAt)) / 1000);
-    $('upd').textContent = (s < 5 ? 'Actualizado ahora' : s < 120 ? 'Dato de hace ' + s + ' s' : 'Dato de hace ' + Math.round(s / 60) + ' min') + (nearId && !manual ? ' · estás en ' + shortName(nearId) : (byLoc && !manual ? ' · según tu ubicación' : ''));
+    const prog = cfg[tab].some((x) => data[x.id] && data[x.id].prog);
+    $('upd').textContent = prog ? 'Horario programado (iTranvías no responde)' : (s < 5 ? 'Actualizado ahora' : s < 120 ? 'Dato de hace ' + s + ' s' : 'Dato de hace ' + Math.round(s / 60) + ' min') + (nearId && !manual ? ' · estás en ' + shortName(nearId) : (byLoc && !manual ? ' · según tu ubicación' : ''));
   }
 }
 

@@ -7,6 +7,22 @@ Web-app ligera para ver en tiempo real cuándo llegan los buses urbanos de A Cor
 
 Las paradas se editan desde la propia app (se guardan en el navegador).
 
+## Horario programado (GTFS)
+
+`gtfs/` tiene el horario programado de todas las paradas, sacado del GTFS de Tranvías ("Autobús urbano de la Coruña" en [nap.transportes.gob.es](https://nap.transportes.gob.es)). Se publica con GitHub Pages y no gasta cupo de iTranvías. El Worker lo usa para:
+
+- dar "qué bus cojo" y "qué bus pasa a las 9" con la hora exacta de cada parada (sin pedir `func=8`);
+- responder "según horario" cuando iTranvías no responde y no hay un dato reciente;
+- tener un catálogo de líneas y paradas de respaldo.
+
+Los IDs de parada y línea son los mismos que en iTranvías. El GTFS actual llega hasta el 31/12/2026. Para actualizarlo, descarga el zip nuevo y ejecuta:
+
+```
+python3 tools/gtfs_build.py RUTA/AL/GTFS.zip
+```
+
+Haz commit de `gtfs/` y súbelo a `main`.
+
 ## Servidor MCP (Alexa+ y otros asistentes)
 
 El Worker expone un servidor [MCP](https://modelcontextprotocol.io) en `POST /mcp` (Streamable HTTP, sin estado) con cuatro herramientas que reutilizan la lógica de la skill:
