@@ -1169,7 +1169,7 @@ const MCP_TOOLS = [
       const meta = await pubMeta();
       const lineId = a.linea ? findLine(meta, a.linea) : null;
       if (a.linea && !lineId) return 'No conozco la línea «' + a.linea + '».';
-      const trip = defaultTrip('mcp', madridNow().min);
+      let trip = defaultTrip('mcp', madridNow().min);
       const mine = [...new Set(ALEXA_TRIPS.ida.concat(ALEXA_TRIPS.vuelta).map((x) => x.id))];
       let stops = [], walk = null;
       if (a.numero_parada) {
@@ -1184,9 +1184,18 @@ const MCP_TOOLS = [
         }
         stops = [f.id];
       } else {
-        stops = ALEXA_TRIPS[trip].map((x) => x.id);
+        // Con una línea, solo las paradas del trayecto por las que pasa (el 14 no pasa por
+        // Nelle ni el 12 por Outeiro 249). Si no pasa por ninguna, se prueba el otro trayecto.
+        let list = ALEXA_TRIPS[trip];
+        if (lineId) {
+          const has = (x) => x.lines.indexOf(lineId) >= 0;
+          const other = trip === 'ida' ? 'vuelta' : 'ida';
+          if (list.some(has)) list = list.filter(has);
+          else if (ALEXA_TRIPS[other].some(has)) { trip = other; list = ALEXA_TRIPS[other].filter(has); }
+        }
+        stops = list.map((x) => x.id);
         walk = {};
-        for (const x of ALEXA_TRIPS[trip]) walk[x.id] = x.walk;
+        for (const x of list) walk[x.id] = x.walk;
       }
       const boards = await uiBoards(meta, stops, { lineId, walk });
       const title = lineId ? 'Línea ' + pubLineName(meta, lineId) + (stops.length === 1 ? ' · ' + pubStopName(meta, stops[0]) : ' · tus paradas de ' + trip) : pubStopName(meta, stops[0]);
