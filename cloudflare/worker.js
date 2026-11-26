@@ -119,9 +119,15 @@ async function handle(req, env, ctx) {
 
     if (url.pathname === '/manifest.webmanifest') {
       return new Response(JSON.stringify({
-        name: 'Mi bus Coruña', short_name: 'Mi bus', start_url: '/', display: 'standalone',
-        background_color: '#c8102e', theme_color: '#c8102e',
-        icons: [{ src: '/icon.svg', sizes: 'any', type: 'image/svg+xml' }]
+        name: 'Corunauta', short_name: 'Corunauta', lang: 'es', start_url: '/', display: 'standalone',
+        description: 'Cuándo pasa tu bus en A Coruña y cuándo tienes que salir.',
+        background_color: '#0f2a44', theme_color: '#0f2a44',
+        icons: [
+          { src: '/icon.svg', sizes: 'any', type: 'image/svg+xml' },
+          { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+          { src: '/icon-512.png', sizes: '512x512', type: 'image/png' },
+          { src: '/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }
+        ]
       }), { headers: { 'content-type': 'application/manifest+json' } });
     }
 
@@ -132,21 +138,24 @@ async function handle(req, env, ctx) {
     // Archivos de la web (asistente, «Añadir parada», «Editar paradas»): el Worker los sirve
     // desde GitHub Pages en su propio dominio, para que la web los pida siempre a su mismo origen.
     if (/^\/(planner\.js|buscador\.js|gtfs\/[a-z0-9_-]+(\/[a-z0-9_-]+)?\.json)$/i.test(url.pathname)) return serveStatic(url.pathname.slice(1));
+    // Logo: iconos de la app y la imagen para compartir (og.png).
+    if (/^\/(og|favicon-32|apple-touch-icon|icon-192|icon-512|icon-maskable-512)\.png$/.test(url.pathname)) return serveStatic(url.pathname.slice(1));
 
     return serveApp();
 }
 
 async function serveStatic(path) {
-  const type = /\.js$/.test(path) ? 'text/javascript; charset=utf-8' : 'application/json; charset=utf-8';
+  const png = /\.png$/.test(path);
+  const type = png ? 'image/png' : /\.js$/.test(path) ? 'text/javascript; charset=utf-8' : 'application/json; charset=utf-8';
   try {
     const body = await pubMemo('app:' + path, 10 * 60e3, async () => {
       const r = await fetch(APP_URL + path);
       if (r.status === 404) return null;
       if (!r.ok) throw new Error('Pages ' + r.status);
-      return r.text();
+      return png ? r.arrayBuffer() : r.text();
     });
     if (body == null) return new Response('no existe', { status: 404 });
-    return new Response(body, { headers: { 'content-type': type, 'cache-control': 'public, max-age=600', 'access-control-allow-origin': '*' } });
+    return new Response(png ? body.slice(0) : body, { headers: { 'content-type': type, 'cache-control': 'public, max-age=600', 'access-control-allow-origin': '*' } });
   } catch (e) {
     return new Response('GitHub Pages no responde', { status: 502 });
   }
@@ -177,7 +186,7 @@ function json(obj, status = 200, cache = 'no-store') {
   });
 }
 
-const ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="112" fill="#c8102e"/><rect x="128" y="120" width="256" height="240" rx="40" fill="#fff"/><rect x="156" y="150" width="200" height="100" rx="14" fill="#c8102e"/><circle cx="184" cy="310" r="20" fill="#c8102e"/><circle cx="328" cy="310" r="20" fill="#c8102e"/><rect x="160" y="360" width="44" height="40" rx="10" fill="#fff"/><rect x="308" y="360" width="44" height="40" rx="10" fill="#fff"/></svg>';
+const ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="22" fill="#0f2a44"/><rect x="45.5" y="60" width="9" height="24" rx="4.5" fill="#fff"/><circle cx="50" cy="40" r="22" fill="none" stroke="#fff" stroke-width="9"/><circle cx="50" cy="40" r="12.5" fill="none" stroke="#2bd47d" stroke-width="2.5" opacity=".45"/><circle cx="50" cy="40" r="7" fill="#2bd47d"/></svg>';
 
 const HTML = String.raw`<!DOCTYPE html>
 <html lang="es"><head>
