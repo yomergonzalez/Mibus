@@ -1462,6 +1462,7 @@ function pubMeta() {
 // → iTranvías. Si iTranvías falla o está en pausa, devuelve el último dato bueno
 // (hasta STALE_MAX) con los minutos ya descontados y stale: true.
 var STALE_MAX = 15 * 60e3;
+var STALE_SHOW = 180;           // segundos
 var lastGood = new Map();
 
 // Lo que ven todos (Alexa, MCP, panel, web): tiempo real + huecos rellenados con el horario.
@@ -1560,7 +1561,10 @@ function staleStop(d) {
       .map((b) => ({ ...b, tiempo: Math.round(parseMin(b.tiempo)) - gone }))
       .filter((b) => b.tiempo >= 0)
   })).filter((l) => l.buses.length);
-  return { at: now, lineas, stale: true, age: Math.round((now - d.at) / 1000) };
+  // Con el presupuesto de 4/min es normal servir un dato de 1–2 min: solo se marca como viejo
+  // (punto ámbar, "dato de hace X min") a partir de STALE_SHOW.
+  const age = Math.round((now - d.at) / 1000);
+  return { at: now, lineas, stale: age > STALE_SHOW, age };
 }
 
 // Adaptador para el código que esperaba la respuesta cruda de iTranvías
