@@ -2,27 +2,42 @@
 <html lang="es"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Mi bus Coruña</title>
-<meta name="theme-color" content="#c8102e">
+<title>Corunauta · Buses de A Coruña en vivo</title>
+<meta name="description" content="Cuándo pasa tu bus en A Coruña y cuándo tienes que salir.">
+<meta name="theme-color" content="#0f2a44">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Mi bus">
+<meta name="apple-mobile-web-app-title" content="Corunauta">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Corunauta">
+<meta property="og:title" content="Corunauta · Buses de A Coruña en vivo">
+<meta property="og:description" content="Cuándo pasa tu bus en A Coruña y cuándo tienes que salir.">
+<meta property="og:url" content="https://corunauta.es/">
+<meta property="og:image" content="https://corunauta.es/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:locale" content="es_ES">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="icon" href="icon.svg">
-<link rel="apple-touch-icon" href="icon.svg">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="icon" href="favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@500;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,700&text=corunauta&display=swap" rel="stylesheet">
 <style>
 :root{color-scheme:light dark;--red:#c8102e;--bg:light-dark(#f2f2f5,#0f0f12);--card:light-dark(#fff,#1b1b20);--ink:light-dark(#111114,#f3f3f5);--mute:light-dark(#6e6e76,#9d9da6);--line:light-dark(#ececf0,#26262c);--soft:light-dark(#fbeef0,#2a1418)}
 *{box-sizing:border-box;min-width:0}
 body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 Figtree,system-ui,sans-serif;-webkit-tap-highlight-color:transparent}
-header{background:var(--red);color:#fff;padding:max(12px,env(safe-area-inset-top)) 14px 10px}
+header{background:#0f2a44;color:#fff;padding:max(12px,env(safe-area-inset-top)) 14px 10px}
 .top{display:flex;align-items:center;justify-content:space-between;gap:12px;max-width:640px;margin:0 auto}
 h1{font-size:22px;line-height:1.05;margin:0;font-weight:800}
+h1.brand{display:flex;align-items:center;gap:7px;font:700 24px/1 'DM Sans',Figtree,system-ui,sans-serif;letter-spacing:-.03em}
+h1.brand svg{flex:none;margin:-2px 0 -4px -3px}
 .trip{display:flex;gap:8px;max-width:640px;margin:10px auto 0}
 .trip .cur{flex:1;min-height:52px;border:0;border-radius:12px;background:#fff;color:#111114;padding:6px 12px;display:flex;align-items:center;gap:8px;text-align:left;font:inherit}
 .trip .cur span{flex:1;min-width:0}
 .trip .cur b{display:block;font-size:16px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .trip .cur small{display:block;font-size:12px;color:#6e6e76}
-.trip .swap{width:72px;flex:none;border:0;border-radius:12px;background:rgba(0,0,0,.2);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;font:800 13px Figtree,system-ui,sans-serif}
+.trip .swap{width:72px;flex:none;border:0;border-radius:12px;background:rgba(255,255,255,.14);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;font:800 13px Figtree,system-ui,sans-serif}
 .sheet{position:fixed;inset:0;z-index:20;display:flex;flex-direction:column;justify-content:flex-end}
 .sheet[hidden]{display:none}
 .scrim{position:absolute;inset:0;border:0;background:rgba(17,17,20,.45)}
@@ -207,7 +222,7 @@ footer{color:var(--mute);font-size:13px;text-align:center;padding:0 16px 28px}
 @media (prefers-reduced-motion:no-preference){.min.now{animation:p 1.4s ease-in-out infinite}@keyframes p{50%{opacity:.45}}}
 </style></head><body>
 <header>
-  <div class="top"><h1>Mi bus</h1><div class="live"><span id="upd" class="upd">Cargando…</span><button id="refresh" aria-label="Actualizar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg></button></div></div>
+  <div class="top"><h1 class="brand"><svg width="30" height="30" viewBox="10 10 80 80" aria-hidden="true"><rect x="45.5" y="60" width="9" height="24" rx="4.5" fill="#fff"/><circle cx="50" cy="40" r="22" fill="none" stroke="#fff" stroke-width="9"/><circle cx="50" cy="40" r="12.5" fill="none" stroke="#2bd47d" stroke-width="2.5" opacity=".45"/><circle cx="50" cy="40" r="7" fill="#2bd47d"/></svg>corunauta</h1><div class="live"><span id="upd" class="upd">Cargando…</span><button id="refresh" aria-label="Actualizar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg></button></div></div>
   <div class="trip">
     <button class="cur" id="tripbtn" aria-haspopup="dialog"><span><b id="tripname">Casa → Trabajo</b><small id="triphint">Tu último trayecto</small></span>
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
