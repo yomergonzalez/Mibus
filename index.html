@@ -118,7 +118,7 @@ main{max-width:640px;margin:0 auto;padding:10px 10px 14px;display:grid;gap:10px}
 .pf input,.pf select{min-height:40px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:16px Figtree,system-ui,sans-serif;padding:0 8px}
 .pf button{min-height:40px;border:0;border-radius:10px;background:var(--red);color:#fff;font:700 14px Figtree,system-ui,sans-serif;padding:0 12px}
 @media(max-width:380px){.pf{grid-template-columns:1fr 1fr}.pf label{grid-column:1/-1}}
-.pr .min{font-size:18px}
+.pr .min{font-size:18px}.pr .min .k{font-size:13px;font-weight:700;color:var(--mute);margin-right:5px}
 .fav{color:#e0a100;font-size:13px;margin-left:4px}
 .other .chip{opacity:.8}.other .min{font-size:18px}
 .sec{font-size:12px;font-weight:700;color:var(--mute);padding:10px 0 4px;border-top:1px solid var(--line)}
@@ -240,7 +240,7 @@ footer{color:var(--mute);font-size:13px;text-align:center;padding:0 16px 28px}
       <button id="pb">Calcular</button>
     </div>
     <div id="pr"></div>
-    <p class="sub">Horario programado de iTranvías; puede variar con el tráfico.</p>
+    <p class="sub">«Sal» incluye ir andando a la parada con margen; «llegada», lo que andas desde que bajas. Horario programado de iTranvías; puede variar con el tráfico.</p>
   </section>
   <div class="add">
     <input id="q" type="search" placeholder="Añadir parada: calle, sitio o nombre" aria-label="Buscar parada por calle, sitio o nombre" autocomplete="off">
@@ -912,8 +912,9 @@ async function runPlan() {
     if (!opts.length) { $('pr').innerHTML = '<div class="empty">No hay buses para esa hora.</div>'; return; }
     $('pr').innerHTML = (p.tipo ? '<div class="sub">' + esc(p.tipo) + '</div>' : '') + opts.map((o) => {
       const li = lineInfo(o.lineId);
-      return '<div class="row pr"><div class="chip" style="background:' + li.c + '">' + esc(li.n) + '</div><div class="mid"><div class="min">' + esc(o.bus) + (o.main ? '<span class="fav">★</span>' : '') + '</div>' +
-        '<div class="stp">' + esc(o.stop) + '</div></div><div class="at"><b>' + esc(o.arrive) + '</b><span>' + 'llegas' + '</span></div></div>';
+      // Lo grande es cuándo salir; debajo, cuándo pasa el bus y dónde; a la derecha, la llegada puerta a puerta.
+      return '<div class="row pr" aria-label="' + esc('Sal a las ' + o.leave + ', el ' + li.n + ' pasa a las ' + o.bus + ' por ' + o.stop + ', llegada a las ' + o.arrive) + '"><div class="chip" style="background:' + li.c + '">' + esc(li.n) + '</div><div class="mid"><div class="min"><span class="k">Sal</span>' + esc(o.leave) + (o.main ? '<span class="fav">★</span>' : '') + '</div>' +
+        '<div class="stp">Pasa ' + esc(o.bus) + ' · ' + esc(o.stop) + '</div></div><div class="at"><b>' + esc(o.arrive) + '</b><span>llegada</span></div></div>';
     }).join('');
   } catch (e) { $('pr').innerHTML = '<div class="err">No se pudo consultar el horario. Prueba otra vez.</div>'; }
 }
