@@ -700,9 +700,11 @@ function goesFrom(P, pos, radioM, to) {
   }
   return out;
 }
+const distTxt = (m) => (m < 1000 ? Math.max(10, Math.round(m / 10) * 10) + ' m' : (m / 1000).toFixed(1).replace('.', ',') + ' km');
+// p.metros y p.minAndando se cuentan desde `from` («de Casa», «de ti», «de allí»).
 function addRow(p, goes, destN, from) {
   const sub = [];
-  if (p.minAndando != null) sub.push(p.minAndando + ' min andando' + (from ? ' ' + from : ''));
+  if (p.metros != null) sub.push('a ' + distTxt(p.metros) + (from ? ' ' + from : '') + (p.minAndando != null && p.metros < 1000 ? ' · ' + p.minAndando + ' min andando' : ''));
   if (destN) sub.push(goes ? 'te lleva a ' + destN : 'no va directo a ' + destN);
   if (!sub.length) sub.push('Parada ' + p.id);
   return '<button data-add="' + esc(p.id) + '"' + (goes ? ' data-lines="' + esc(goes.join(',')) + '"' : '') + ' aria-label="Añadir ' + esc(p.nombre) + '">' +
@@ -723,7 +725,7 @@ async function renderAdd() {
   let lib = null; try { lib = await ensureLibs(); } catch (e) {}
   if (seq !== AD.seq) return;
   if (!lib) { box.innerHTML = addNameSearch(); return; }
-  const P = lib.P, B = lib.B, e = tripEnds(), destN = e.dest;
+  const P = lib.P, B = lib.B, e = tripEnds(), destN = e.dest, fromN = ((tab === 'ida' ? cfg.origen : cfg.destino) || {}).nombre || '';
   const have = new Set(cfg[tab].map((s) => String(s.id)));
   const near = (pos, radio, max, goes) => P.paradasCerca(pos, radio).filter((p) => !have.has(p.id))
     .sort((a, b) => (goes[a.id] ? 0 : 1) - (goes[b.id] ? 0 : 1) || a.metros - b.metros).slice(0, max);
@@ -732,20 +734,21 @@ async function renderAdd() {
   if (AD.place) {
     const goes = goesFrom(P, AD.place.pos, 500, e.to), list = near(AD.place.pos, 500, 8, goes), destN = destFor(AD.place.pos);
     h = '<button class="ghost back" data-a="back">‹ Volver</button><div class="lab">Paradas cerca de ' + esc(AD.place.nombre) + '</div>' +
-      (list.length ? addList(list.map((p) => addRow(p, goes[p.id], destN, 'desde allí'))) : '<p class="note">No hay paradas a menos de 500 m de ahí.</p>');
+      (list.length ? addList(list.map((p) => addRow(p, goes[p.id], destN, 'de allí'))) : '<p class="note">No hay paradas a menos de 500 m de ahí.</p>');
   } else if (B.norm(AD.q).length >= 2) {
     const q = AD.q, qn = B.norm(q);
     const ids = Object.keys(lib.meta.stops).filter((id) => id === qn || (qn.length >= 3 && B.encaja(q, lib.meta.stops[id]))).slice(0, 6).filter((id) => !have.has(id));
     const stops = ids.map((id) => {
       const g = goesFrom(P, lib.meta.pos[id], 1, e.to)[id];
-      return addRow({ id, nombre: lib.meta.stops[id], lineas: P.lineasDe ? P.lineasDe(id) : [] }, g, destFor(lib.meta.pos[id]), '');
+      const ps = lib.meta.pos[id], m = e.from && ps ? P.distM(e.from, ps) : null;
+      return addRow({ id, nombre: lib.meta.stops[id], lineas: P.lineasDe ? P.lineasDe(id) : [], metros: m, minAndando: m != null ? P.minAndando(m) : null }, g, destFor(ps), fromN ? 'de ' + fromN : '');
     });
     const places = B.mezclar(q, AD.rq === q ? AD.remote : [], null, 5).filter((r) => r.tipo !== 'parada');
     AD.places = places;
     // La primera calle o sitio: sus paradas cercanas directamente, sin tener que tocarla.
     if (places.length) {
       const top = places[0], goes = goesFrom(P, top.pos, 400, e.to), list = near(top.pos, 400, 4, goes);
-      if (list.length) h += '<div class="lab">Cerca de ' + esc(top.nombre) + '</div>' + addList(list.map((p) => addRow(p, goes[p.id], destFor(top.pos), 'desde allí')));
+      if (list.length) h += '<div class="lab">Cerca de ' + esc(top.nombre) + '</div>' + addList(list.map((p) => addRow(p, goes[p.id], destFor(top.pos), 'de allí')));
     }
     if (places.length) h += '<div class="lab">' + (places.length > 1 ? 'Otras calles y sitios' : 'Ver más paradas de') + '</div><div class="lst">' + places.map((r, i) => '<button data-place="' + i + '"><span><b>' + esc(r.nombre) + '</b><small>' +
       esc((TIPO[r.tipo] || 'Sitio') + (r.detalle ? ' · ' + r.detalle : '')) + ' · ver paradas cerca</small></span>' + ICON.chev + '</button>').join('') + '</div>';
@@ -756,14 +759,14 @@ async function renderAdd() {
       const g = P.porParadaDeSubida(P.opcionesDirectas(e.from, e.to, { radioOrigenM: 600, radioDestinoM: 400 }))
         .filter((x) => !have.has(x.parada.id)).slice(0, 5);
       g.forEach((x) => have.add(x.parada.id)); // que no se repitan en «Cerca de ti»
-      const fromN = ((tab === 'ida' ? cfg.origen : cfg.destino) || {}).nombre;
-      if (g.length) h += '<div class="lab">Te llevan a ' + esc(destN || 'tu destino') + '</div>' + addList(g.map((x) => addRow({ id: x.parada.id, nombre: x.parada.nombre, minAndando: x.minAndando },
-        x.opciones.map((o) => o.linea).filter((l, i, a) => a.indexOf(l) === i), '', fromN ? 'desde ' + fromN : '')));
+      if (g.length) h += '<div class="lab">Cerca de ' + esc(fromN || 'tu origen') + ', con bus directo a ' + esc(destN || 'tu destino') + '</div>' +
+        addList(g.map((x) => addRow({ id: x.parada.id, nombre: x.parada.nombre, minAndando: x.minAndando, metros: lib.meta.pos[x.parada.id] ? P.distM(e.from, lib.meta.pos[x.parada.id]) : null },
+          x.opciones.map((o) => o.linea).filter((l, i, a) => a.indexOf(l) === i), '', fromN ? 'de ' + fromN : '')));
     }
     const fresh = here && Date.now() - here.t < 5 * 60000;
     if (fresh) {
       const goes = goesFrom(P, here.p, 500, e.to), list = near(here.p, 500, 6, goes);
-      h += '<div class="lab">Cerca de ti</div>' + (list.length ? addList(list.map((p) => addRow(p, goes[p.id], destFor(here.p), ''))) : '<p class="note">No hay paradas a menos de 500 m.</p>');
+      h += '<div class="lab">Cerca de ti</div>' + (list.length ? addList(list.map((p) => addRow(p, goes[p.id], destFor(here.p), 'de ti'))) : '<p class="note">No hay paradas a menos de 500 m.</p>');
     } else if (navigator.geolocation) {
       h += '<button class="ghost near" data-a="near"' + (AD.locating ? ' disabled' : '') + '>' + ICON_PIN + (AD.locating ? 'Buscando tu ubicación…' : 'Ver paradas cerca de mí') + '</button>' + (AD.err ? '<p class="note">' + esc(AD.err) + '</p>' : '');
     }
