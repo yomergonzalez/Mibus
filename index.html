@@ -180,8 +180,12 @@ body.editing .edit{display:flex}
 .add{display:none;gap:8px}
 body.editing .add{display:grid}
 .add input{min-height:48px;border-radius:12px;border:1.5px solid var(--line);background:var(--card);color:var(--ink);font:16px Figtree,system-ui,sans-serif;padding:0 14px}
-.res button{display:block;width:100%;text-align:left;min-height:44px;border:0;border-bottom:1px solid var(--line);background:transparent;color:var(--ink);font:16px Figtree,system-ui,sans-serif;padding:8px 4px}
-.res small{color:var(--mute)}
+.res{display:grid;gap:14px}.res .lab{margin:4px 2px -6px}
+.res .lst button{min-height:56px;font:16px Figtree,system-ui,sans-serif;cursor:pointer}
+.res .plus{flex:none;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:var(--red);color:#fff;font:800 19px/1 Figtree,system-ui,sans-serif}
+.res .ghost{display:flex;align-items:center;gap:8px;justify-content:center;border:1.5px dashed var(--line);border-radius:12px}
+.res .ghost.back{justify-content:flex-start;border:0;padding:0 2px;min-height:36px}
+.toast{display:flex;align-items:center;gap:14px}.toast button{border:0;background:none;color:#ffb400;font:800 14px Figtree,system-ui,sans-serif;min-height:32px;padding:0}
 footer{color:var(--mute);font-size:13px;text-align:center;padding:0 16px 28px}
 :focus-visible{outline:3px solid #ffb400;outline-offset:2px}
 @media (prefers-reduced-motion:no-preference){.min.now{animation:p 1.4s ease-in-out infinite}@keyframes p{50%{opacity:.45}}}
@@ -208,7 +212,7 @@ footer{color:var(--mute);font-size:13px;text-align:center;padding:0 16px 28px}
     <p class="sub">Horario programado de iTranvías; puede variar con el tráfico.</p>
   </section>
   <div class="add">
-    <input id="q" type="search" placeholder="Añadir parada: busca por calle (p. ej. Nelle)" autocomplete="off">
+    <input id="q" type="search" placeholder="Añadir parada: calle, sitio o nombre" aria-label="Buscar parada por calle, sitio o nombre" autocomplete="off">
     <div class="res" id="res"></div>
     <button class="tg" id="reset">Volver a calcular las paradas de este trayecto</button>
   </div>
@@ -374,8 +378,9 @@ function render() {
   renderTrip();
   if (!store.trips.length) { $('list').innerHTML = '<section class="card" style="padding-bottom:14px"><h2>No tienes trayectos</h2><p class="sub">Dinos desde dónde sales y a dónde vas, y elegimos las paradas por ti.</p><button class="bigbtn" data-a="wizard">Configura tu trayecto</button></section>'; return; }
   const stops = cfg[tab];
-  if (!stops.length) { $('list').innerHTML = '<div class="card"><p class="sub">No hay paradas. Pulsa «Editar paradas» para añadir una.</p></div>'; return; }
+  if (!stops.length) { $('list').innerHTML = '<div class="card"><p class="sub">' + (document.body.classList.contains('editing') ? 'No hay paradas. Añade una abajo.' : 'No hay paradas. Pulsa «Editar paradas» para añadir una.') + '</p></div>'; if (document.body.classList.contains('editing') && AD.key !== tab + cfg.id) renderAdd(); return; }
   if (!document.body.classList.contains('editing')) { renderList(stops); return; }
+  if (AD.key !== tab + cfg.id + stops.map((s) => s.id).join(',')) renderAdd();
   $('list').innerHTML = stops.map((s, i) => {
     const d = data[s.id];
     let rows = '';
@@ -642,7 +647,11 @@ $('deltrip').onclick = () => {
   cfg = EMPTY; tab = 'ida'; save(); render(); openWizard({});
 };
 $('refresh').onclick = refresh;
-$('editbtn').onclick = () => { const on = document.body.classList.toggle('editing'); $('editbtn').textContent = on ? 'Listo' : 'Editar paradas'; render(); };
+$('editbtn').onclick = () => {
+  const on = document.body.classList.toggle('editing'); $('editbtn').textContent = on ? 'Listo' : 'Editar paradas';
+  AD.q = ''; AD.place = null; AD.err = ''; AD.key = ''; $('q').value = ''; $('res').innerHTML = '';
+  render(); if (on) renderAdd();
+};
 $('list').addEventListener('toggle', (e) => { if (e.target.classList && e.target.classList.contains('missed')) missOpen = e.target.open; }, true);
 $('reset').onclick = () => openWizard({ trip: cfg });
 $('newtrip').onclick = () => { $('sheet').hidden = true; openWizard({}); };
@@ -659,7 +668,11 @@ $('list').onclick = (e) => {
     return;
   }
   if (b.dataset.f != null) { filt = b.dataset.f ? Number(b.dataset.f) : null; manualFilt = true; render(); return; }
-  if (b.dataset.rm != null) { cfg[tab].splice(Number(b.dataset.rm), 1); save(); render(); return; }
+  if (b.dataset.rm != null) {
+    const i = Number(b.dataset.rm), t = cfg, d = tab, gone = t[d].splice(i, 1)[0]; save(); render();
+    if (gone) toast('Quitada: ' + stopName(gone.id), { label: 'Deshacer', fn: () => { if (!t[d].some((s) => s.id === gone.id)) t[d].splice(Math.min(i, t[d].length), 0, gone); save(); render(); refresh(); } });
+    return;
+  }
   if (b.dataset.l) {
     const s = cfg[tab][Number(b.dataset.i)], lid = Number(b.dataset.l);
     const d = data[s.id];
@@ -669,17 +682,130 @@ $('list').onclick = (e) => {
     save(); render();
   }
 };
-$('q').oninput = () => {
-  const q = norm($('q').value.trim());
-  if (q.length < 2) { $('res').innerHTML = ''; return; }
+// ---------- Añadir parada (modo edición) ----------
+// Sin escribir: las paradas que te llevan al destino del trayecto y las que tienes cerca.
+// Escribiendo: paradas por nombre y calles o sitios; al tocar un sitio, sus paradas cercanas.
+const AD = { q: '', place: null, remote: [], rq: '', seq: 0, timer: 0, locating: false, err: '', key: '' };
+function tripEnds() {
+  const ida = tab === 'ida', d = (ida ? cfg.destino : cfg.origen) || {};
+  return { from: endPos(cfg, ida ? 'origen' : 'destino'), to: endPos(cfg, ida ? 'destino' : 'origen'), dest: d.nombre || '' };
+}
+// Paradas a menos de radioM de pos con bus directo al final del trayecto: id → [líneas].
+function goesFrom(P, pos, radioM, to) {
+  const out = {};
+  if (!pos || !to) return out;
+  for (const o of P.opcionesDirectas(pos, to, { radioOrigenM: radioM, radioDestinoM: 400 })) {
+    const l = out[o.sube.id] = out[o.sube.id] || [];
+    if (l.indexOf(o.linea) < 0) l.push(o.linea);
+  }
+  return out;
+}
+const distTxt = (m) => (m < 1000 ? Math.max(10, Math.round(m / 10) * 10) + ' m' : (m / 1000).toFixed(1).replace('.', ',') + ' km');
+// p.metros y p.minAndando se cuentan desde `from` («de Casa», «de ti», «de allí»).
+function addRow(p, goes, destN, from) {
+  const sub = [];
+  if (p.metros != null) sub.push('a ' + distTxt(p.metros) + (from ? ' ' + from : '') + (p.minAndando != null && p.metros < 1000 ? ' · ' + p.minAndando + ' min andando' : ''));
+  if (destN) sub.push(goes ? 'te lleva a ' + destN : 'no va directo a ' + destN);
+  if (!sub.length) sub.push('Parada ' + p.id);
+  return '<button data-add="' + esc(p.id) + '"' + (goes ? ' data-lines="' + esc(goes.join(',')) + '"' : '') + ' aria-label="Añadir ' + esc(p.nombre) + '">' +
+    '<span><b>' + esc(p.nombre) + '</b><small>' + esc(sub.join(' · ')) + '</small></span>' + chipsOf(goes || p.lineas || []) + '<span class="plus" aria-hidden="true">+</span></button>';
+}
+const addList = (rows) => '<div class="lst">' + rows.join('') + '</div>';
+function addNameSearch() { // por si no cargan las librerías: búsqueda por nombre de siempre
+  const q = norm(AD.q.trim());
+  if (q.length < 2) return '<p class="note">Escribe el nombre de la calle de la parada.</p>';
   const hits = Object.keys(meta.stops).filter((id) => norm(meta.stops[id]).indexOf(q) >= 0 || id === q).slice(0, 8);
-  $('res').innerHTML = hits.map((id) => '<button data-add="' + esc(id) + '">' + esc(meta.stops[id]) + ' <small>· parada ' + esc(id) + '</small></button>').join('') ||
-    '<p class="sub">Sin resultados.</p>';
+  return hits.length ? addList(hits.map((id) => addRow({ id, nombre: meta.stops[id] }, null, '', ''))) : '<p class="note">Sin resultados.</p>';
+}
+async function renderAdd() {
+  if (!document.body.classList.contains('editing')) return;
+  const box = $('res'), seq = ++AD.seq;
+  AD.key = tab + cfg.id + cfg[tab].map((s) => s.id).join(',');
+  if (!box.innerHTML) box.innerHTML = '<p class="note">Cargando paradas…</p>';
+  let lib = null; try { lib = await ensureLibs(); } catch (e) {}
+  if (seq !== AD.seq) return;
+  if (!lib) { box.innerHTML = addNameSearch(); return; }
+  const P = lib.P, B = lib.B, e = tripEnds(), destN = e.dest, fromN = ((tab === 'ida' ? cfg.origen : cfg.destino) || {}).nombre || '';
+  const have = new Set(cfg[tab].map((s) => String(s.id)));
+  const near = (pos, radio, max, goes) => P.paradasCerca(pos, radio).filter((p) => !have.has(p.id))
+    .sort((a, b) => (goes[a.id] ? 0 : 1) - (goes[b.id] ? 0 : 1) || a.metros - b.metros).slice(0, max);
+  let h = '';
+  const destFor = (pos) => (e.to && pos && P.distM(pos, e.to) > 800 ? destN : ''); // junto al destino no tiene sentido «te lleva»
+  if (AD.place) {
+    const goes = goesFrom(P, AD.place.pos, 500, e.to), list = near(AD.place.pos, 500, 8, goes), destN = destFor(AD.place.pos);
+    h = '<button class="ghost back" data-a="back">‹ Volver</button><div class="lab">Paradas cerca de ' + esc(AD.place.nombre) + '</div>' +
+      (list.length ? addList(list.map((p) => addRow(p, goes[p.id], destN, 'de allí'))) : '<p class="note">No hay paradas a menos de 500 m de ahí.</p>');
+  } else if (B.norm(AD.q).length >= 2) {
+    const q = AD.q, qn = B.norm(q);
+    const ids = Object.keys(lib.meta.stops).filter((id) => id === qn || (qn.length >= 3 && B.encaja(q, lib.meta.stops[id]))).slice(0, 6).filter((id) => !have.has(id));
+    const stops = ids.map((id) => {
+      const g = goesFrom(P, lib.meta.pos[id], 1, e.to)[id];
+      const ps = lib.meta.pos[id], m = e.from && ps ? P.distM(e.from, ps) : null;
+      return addRow({ id, nombre: lib.meta.stops[id], lineas: P.lineasDe ? P.lineasDe(id) : [], metros: m, minAndando: m != null ? P.minAndando(m) : null }, g, destFor(ps), fromN ? 'de ' + fromN : '');
+    });
+    const places = B.mezclar(q, AD.rq === q ? AD.remote : [], null, 5).filter((r) => r.tipo !== 'parada');
+    AD.places = places;
+    // La primera calle o sitio: sus paradas cercanas directamente, sin tener que tocarla.
+    if (places.length) {
+      const top = places[0], goes = goesFrom(P, top.pos, 400, e.to), list = near(top.pos, 400, 4, goes);
+      if (list.length) h += '<div class="lab">Cerca de ' + esc(top.nombre) + '</div>' + addList(list.map((p) => addRow(p, goes[p.id], destFor(top.pos), 'de allí')));
+    }
+    if (places.length) h += '<div class="lab">' + (places.length > 1 ? 'Otras calles y sitios' : 'Ver más paradas de') + '</div><div class="lst">' + places.map((r, i) => '<button data-place="' + i + '"><span><b>' + esc(r.nombre) + '</b><small>' +
+      esc((TIPO[r.tipo] || 'Sitio') + (r.detalle ? ' · ' + r.detalle : '')) + ' · ver paradas cerca</small></span>' + ICON.chev + '</button>').join('') + '</div>';
+    if (stops.length) h += '<div class="lab">Paradas</div>' + addList(stops);
+    if (!h) h = '<p class="note">' + (qn.length >= 3 && AD.rq !== q ? 'Buscando…' : 'Sin resultados. Prueba con la calle o un sitio conocido.') + '</p>';
+  } else {
+    if (e.from && e.to) {
+      const g = P.porParadaDeSubida(P.opcionesDirectas(e.from, e.to, { radioOrigenM: 600, radioDestinoM: 400 }))
+        .filter((x) => !have.has(x.parada.id)).slice(0, 5);
+      g.forEach((x) => have.add(x.parada.id)); // que no se repitan en «Cerca de ti»
+      if (g.length) h += '<div class="lab">Cerca de ' + esc(fromN || 'tu origen') + ', con bus directo a ' + esc(destN || 'tu destino') + '</div>' +
+        addList(g.map((x) => addRow({ id: x.parada.id, nombre: x.parada.nombre, minAndando: x.minAndando, metros: lib.meta.pos[x.parada.id] ? P.distM(e.from, lib.meta.pos[x.parada.id]) : null },
+          x.opciones.map((o) => o.linea).filter((l, i, a) => a.indexOf(l) === i), '', fromN ? 'de ' + fromN : '')));
+    }
+    const fresh = here && Date.now() - here.t < 5 * 60000;
+    if (fresh) {
+      const goes = goesFrom(P, here.p, 500, e.to), list = near(here.p, 500, 6, goes);
+      h += '<div class="lab">Cerca de ti</div>' + (list.length ? addList(list.map((p) => addRow(p, goes[p.id], destFor(here.p), 'de ti'))) : '<p class="note">No hay paradas a menos de 500 m.</p>');
+    } else if (navigator.geolocation) {
+      h += '<button class="ghost near" data-a="near"' + (AD.locating ? ' disabled' : '') + '>' + ICON_PIN + (AD.locating ? 'Buscando tu ubicación…' : 'Ver paradas cerca de mí') + '</button>' + (AD.err ? '<p class="note">' + esc(AD.err) + '</p>' : '');
+    }
+  }
+  box.innerHTML = h;
+}
+$('q').oninput = () => {
+  AD.q = $('q').value; AD.place = null; renderAdd();
+  clearTimeout(AD.timer);
+  const q = AD.q;
+  if (norm(q.trim()).length < 3 || !PROXY) return;
+  AD.timer = setTimeout(async () => {
+    let lib = null; try { lib = await ensureLibs(); } catch (e) { return; }
+    const e = tripEnds();
+    const rem = await lib.B.remoto(q, { base: PROXY, cerca: (here && here.p) || e.from || null });
+    if (AD.q !== q) return;
+    AD.remote = rem; AD.rq = q; renderAdd();
+  }, 350);
 };
-$('res').onclick = (e) => {
-  const b = e.target.closest('button[data-add]'); if (!b) return;
-  cfg[tab].push({ id: Number(b.dataset.add), lines: null }); save();
-  $('q').value = ''; $('res').innerHTML = ''; render(); refresh();
+$('res').onclick = (ev) => {
+  const b = ev.target.closest('button'); if (!b) return;
+  if (b.dataset.a === 'back') { AD.place = null; renderAdd(); return; }
+  if (b.dataset.a === 'near') {
+    AD.locating = true; AD.err = ''; renderAdd();
+    navigator.geolocation.getCurrentPosition((p) => {
+      here = { p: [p.coords.latitude, p.coords.longitude], acc: p.coords.accuracy || 9999, t: Date.now() };
+      AD.locating = false; renderAdd();
+    }, (er) => { AD.locating = false; AD.err = er && er.code === 1 ? 'Sin permiso de ubicación. Busca tu calle arriba.' : 'No pudimos ver tu ubicación. Busca tu calle arriba.'; renderAdd(); },
+    { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
+    return;
+  }
+  if (b.dataset.place != null) { const r = AD.places && AD.places[Number(b.dataset.place)]; if (r) { AD.place = r; renderAdd(); } return; }
+  if (b.dataset.add == null) return;
+  const id = Number(b.dataset.add), lines = b.dataset.lines ? b.dataset.lines.split(',').map(Number) : null;
+  if (!cfg[tab].some((s) => s.id === id)) cfg[tab].push({ id, lines });
+  save();
+  AD.q = ''; AD.place = null; $('q').value = '';
+  render(); refresh();
+  toast('Añadida: ' + stopName(id));
 };
 function planLabel() { $('pl').textContent = tab === 'ida' ? 'Llegar a las' : 'Salgo a las'; try { const v = localStorage.getItem('mibus-plan-' + tab); $('pt').value = v || (tab === 'ida' ? '10:00' : '22:00'); } catch (e) {} $('pr').innerHTML = ''; }
 async function runPlan() {
@@ -736,7 +862,11 @@ function openWizard(o) {
   if (!W.trip) wLocate();
 }
 function closeWizard() { W = null; $('wiz').hidden = true; document.body.style.overflow = ''; }
-function toast(t) { const el = $('toast'); el.textContent = t; el.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => { el.hidden = true; }, 4000); }
+function toast(t, act) {
+  const el = $('toast'); el.textContent = t; el.hidden = false; clearTimeout(toast.t);
+  if (act) { const b = document.createElement('button'); b.textContent = act.label; b.onclick = () => { el.hidden = true; act.fn(); }; el.appendChild(b); }
+  toast.t = setTimeout(() => { el.hidden = true; }, act ? 7000 : 4000);
+}
 
 function wLocate() {
   W.mode = 'loc'; W.err = '';

@@ -167,7 +167,7 @@
       return grupos;
     }
 
-    return { paradasCerca, opcionesDirectas, mejoresPorLinea, porParadaDeSubida, tramos, distM, minAndando };
+    return { paradasCerca, opcionesDirectas, mejoresPorLinea, porParadaDeSubida, tramos, lineasDe, distM, minAndando };
   }
 
   return { crear, distM, minAndando };

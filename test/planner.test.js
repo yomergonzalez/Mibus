@@ -96,3 +96,8 @@ test('real: Casa → El Corte Inglés y vuelta', { skip: !hayRutas && 'falta gtf
   assert.equal(catorceV && catorceV.sube.id, '269', 'vuelta en el 14 desde Rda. de Outeiro, Pérez Ardá');
   assert.notEqual(doceV.sentido, doce.sentido, 'la vuelta va en el otro sentido');
 });
+
+test('lineasDe: líneas que pasan por una parada, sin repetir', () => {
+  assert.deepEqual(plan.lineasDe('1').sort(), ['100', '200']);
+  assert.deepEqual(plan.lineasDe('99'), []);
+});
