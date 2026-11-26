@@ -1497,7 +1497,7 @@ function pubStopRaw(id) {
       const { r, j } = await upstreamJSON(API + "?dato=" + id + "&func=0", { headers: UPSTREAM_HEADERS, cache: "no-store" });
       if (!r.ok) throw new Error("iTranvías " + r.status);
       const prev = lastGood.get(id) || shared;
-      const d = { at: Date.now(), lineas: withGhosts(prev, dedupeBuses((j.buses && j.buses.lineas) || [])) };
+      const d = { at: Date.now(), lineas: withGhosts(prev, (j.buses && j.buses.lineas) || []) };
       lastGood.set(id, d);
       await stopCachePut(id, d);
       return d;
@@ -1518,28 +1518,6 @@ function pubStopRaw(id) {
 //    hasta 10 min con su hora estimada y sinSenal: true.
 // 2) fillFromSchedule: horas del horario (próximos 60 min) sin ningún bus en vivo cerca
 //    (de 3 min antes a 8 min después) se añaden con programado: true.
-// iTranvías a veces lista el mismo bus dos veces durante un momento (26 nov: dos 12 en Nelle,
-// ambos a 22 min, a 4,1 y 4,2 km; un minuto después solo uno). Por línea se quita el repetido:
-// mismo número de coche (campo bus) con ≤ 2 min de diferencia, o, sin número, ≤ 1 min y ≤ 300 m.
-// Si fueran dos coches pegados, para el usuario es el mismo paso.
-function dedupeBuses(lineas) {
-  return lineas.map((l) => {
-    const keep = [];
-    const sorted = (l.buses || []).slice().sort((a, b) => parseMin(a.tiempo) - parseMin(b.tiempo));
-    for (const b of sorted) {
-      const t = parseMin(b.tiempo), m = Number(b.distancia);
-      const dup = keep.some((k) => {
-        const dt = Math.abs(parseMin(k.tiempo) - t);
-        if (b.bus != null && k.bus != null && String(b.bus) === String(k.bus)) return dt <= 2;
-        const km = Number(k.distancia);
-        return dt <= 1 && Number.isFinite(m) && Number.isFinite(km) && Math.abs(km - m) <= 300;
-      });
-      if (!dup) keep.push(b);
-    }
-    return { ...l, buses: keep };
-  });
-}
-
 var GHOST_MAX = 10 * 60e3;
 function withGhosts(prev, lineas) {
   if (!prev || !prev.lineas) return lineas;
