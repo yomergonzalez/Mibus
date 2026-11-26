@@ -351,6 +351,10 @@ fetch('/api/meta').then((r) => r.json()).then((m) => { meta = m || meta; render(
 
 
 // ---------- Alexa ----------
+// Minutos de margen que se suman al tiempo andando en todos los "sal a las…" (ascensor, portal,
+// semáforos, cerrar la puerta). Se aplica una sola vez, abajo, a ALEXA_TRIPS.walk y PLAN.walkTo.
+const MARGEN_SALIDA = 3;
+
 // Paradas y líneas favoritas para Alexa (las mismas que la app por defecto).
 const ALEXA_TRIPS = {
   // walk = minutos andando hasta la parada (desde casa en la ida, desde El Corte Inglés en la vuelta)
@@ -460,6 +464,9 @@ const PLAN = {
     { id: 120, stop: 'Ronda de Outeiro 126', line: 2000, dir: 'vuelta', off: 30, walkTo: 8, ride: 4, walkFrom: 5 }
   ]
 };
+// walk/walkTo pasan a ser "puerta → parada con margen": así panel, MCP, Alexa y /api/plan usan el mismo valor.
+for (const t of Object.values(ALEXA_TRIPS)) for (const s of t) s.walk += MARGEN_SALIDA;
+for (const t of Object.values(PLAN)) for (const e of t) e.walkTo += MARGEN_SALIDA;
 
 function parseHHMM(v) {
   const m = String(v).match(/^(\d{1,2})(?::?(\d{2}))?$/);
