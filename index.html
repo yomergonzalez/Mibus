@@ -906,7 +906,10 @@ $('pb').onclick = runPlan;
 
 // ---------- «Configura tu trayecto»: origen → destino → paradas ----------
 // planner.js, buscador.js y los recorridos se cargan solo al abrir el asistente.
-const PAGES = /github\.io$|^localhost$|^127\./.test(location.hostname) || location.protocol === 'file:' ? '' : 'https://yomergonzalez.github.io/Mibus/';
+// planner.js, buscador.js y gtfs/*.json se piden siempre al mismo dominio de la web: GitHub Pages
+// (github.io o corunauta.es) los tiene al lado de index.html y el Worker los sirve en el suyo.
+// Antes, desde otro dominio se pedían a github.io, que con el dominio propio redirige y fallaba.
+const PAGES = location.protocol === 'file:' ? 'https://yomergonzalez.github.io/Mibus/' : '';
 let libs = null, W = null, wTimer = 0;
 function loadScript(src) { return new Promise((ok, ko) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = ko; document.head.appendChild(s); }); }
 function ensureLibs() {
