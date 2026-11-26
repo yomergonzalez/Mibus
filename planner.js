@@ -111,14 +111,15 @@
 
     /**
      * Opciones directas de origen a destino (puntos [lat, lon]).
+     * opts: radioM (400 m por defecto), o radioOrigenM / radioDestinoM por separado.
      * Devuelve una opción por línea y parada de subida (la mejor bajada para esa pareja),
      * ordenadas por tiempo total. No incluye las que tardan más que ir andando.
      */
     function opcionesDirectas(origen, destino, opts) {
       opts = opts || {};
       const radio = opts.radioM || 400;
-      const desde = paradasCerca(origen, radio);
-      const hasta = paradasCerca(destino, radio);
+      const desde = paradasCerca(origen, opts.radioOrigenM || radio);
+      const hasta = paradasCerca(destino, opts.radioDestinoM || radio);
       const andando = minAndando(distM(origen, destino));
       const mejor = {};
       for (const t of tramos(desde, hasta)) {

@@ -18,9 +18,63 @@ header{background:var(--red);color:#fff;padding:max(12px,env(safe-area-inset-top
 .top{display:flex;align-items:center;justify-content:space-between;gap:12px;max-width:640px;margin:0 auto}
 h1{font-size:22px;line-height:1.05;margin:0;font-weight:800}
 .clock{font-size:15px;opacity:.9;font-variant-numeric:tabular-nums}
-.seg{display:grid;grid-template-columns:1fr 1fr;gap:3px;background:rgba(0,0,0,.18);border-radius:12px;padding:3px;max-width:640px;margin:10px auto 0}
-.seg button{border:0;border-radius:9px;min-height:38px;font:700 15px Figtree,system-ui,sans-serif;color:#fff;background:transparent}
-.seg button[aria-pressed=true]{background:#fff;color:var(--red)}
+.trip{display:flex;gap:8px;max-width:640px;margin:10px auto 0}
+.trip .cur{flex:1;min-height:52px;border:0;border-radius:12px;background:#fff;color:#111114;padding:6px 12px;display:flex;align-items:center;gap:8px;text-align:left;font:inherit}
+.trip .cur span{flex:1;min-width:0}
+.trip .cur b{display:block;font-size:16px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.trip .cur small{display:block;font-size:12px;color:#6e6e76}
+.trip .swap{width:72px;flex:none;border:0;border-radius:12px;background:rgba(0,0,0,.2);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;font:800 13px Figtree,system-ui,sans-serif}
+.sheet{position:fixed;inset:0;z-index:20;display:flex;flex-direction:column;justify-content:flex-end}
+.sheet[hidden]{display:none}
+.scrim{position:absolute;inset:0;border:0;background:rgba(17,17,20,.45)}
+.pane{position:relative;background:var(--card);border-radius:22px 22px 0 0;padding:10px 16px max(20px,env(safe-area-inset-bottom));width:100%;max-width:640px;margin:0 auto;display:grid;gap:6px;max-height:85vh;overflow:auto}
+.grab{width:40px;height:5px;border-radius:3px;background:var(--line);justify-self:center;margin-bottom:4px}
+.pane h2{font-size:20px;margin:0 4px 4px}
+.topt{display:flex;align-items:center;gap:10px;width:100%;min-height:58px;padding:8px 12px;border-radius:14px;border:2px solid var(--line);background:var(--card);color:var(--ink);text-align:left;font:inherit}
+.topt[aria-pressed=true]{border-color:var(--red)}
+.topt span{flex:1;min-width:0}.topt b{display:block;font-size:16px}.topt small{display:block;font-size:12px;color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.act{min-height:48px;border:0;background:transparent;color:var(--ink);font:700 16px Figtree,system-ui,sans-serif;text-align:left;padding:0 12px;border-radius:12px}
+.act.red{color:var(--red);font-weight:800}.act.danger{color:var(--red);font-weight:600;font-size:14px}
+.acts{display:grid;border-top:1px solid var(--line);margin-top:6px;padding-top:6px}
+.wiz{position:fixed;inset:0;z-index:30;background:var(--bg);overflow:auto;display:flex;flex-direction:column}
+.wiz[hidden]{display:none}
+.wnav{border:0;background:transparent;color:#fff;font:700 15px Figtree,system-ui,sans-serif;min-height:44px;padding:0}
+.wstep{font-size:13px;font-weight:700}
+.prog{display:flex;gap:6px;max-width:640px;margin:6px auto 2px}.prog i{flex:1;height:4px;border-radius:2px;background:rgba(255,255,255,.35)}.prog i.on{background:#fff}
+.wb{max-width:640px;width:100%;margin:0 auto;padding:20px 16px 28px;display:grid;gap:16px;align-content:start}
+.wb h2{font-size:26px;line-height:1.15;margin:0;font-weight:800}
+.lead{margin:4px 0 0;color:var(--mute);font-size:15px}
+.bigbtn{min-height:54px;border-radius:14px;border:0;background:var(--red);color:#fff;font:800 17px Figtree,system-ui,sans-serif;width:100%}
+.bigbtn:disabled{opacity:.45}
+.ghost{min-height:44px;border:0;background:transparent;color:var(--ink);font:700 15px Figtree,system-ui,sans-serif}
+.lab{font-size:13px;font-weight:700;color:var(--mute);text-transform:uppercase;letter-spacing:.04em;margin-bottom:-8px}
+.lst{background:var(--card);border-radius:16px;overflow:hidden}
+.lst>*{display:flex;align-items:center;gap:12px;padding:12px 14px;border:0;border-top:1px solid var(--line);width:100%;background:none;color:var(--ink);font:inherit;text-align:left}
+.lst>*:first-child{border-top:0}
+.lst>*>span:first-child{flex:1;min-width:0}.lst b{display:block;font-size:16px}.lst small{display:block;font-size:13px;color:var(--mute)}
+.lc{display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;flex:none;max-width:50%}.lc .chip{min-width:30px;height:24px;font-size:13px;padding:0 6px}
+.here{background:var(--card);border-radius:16px;padding:12px 14px;display:flex;align-items:center;gap:12px}
+.here>span{flex:1;min-width:0}.here b{display:block}.here small{color:var(--mute);font-size:13px}
+.here button{border:0;background:transparent;color:var(--red);font:700 15px Figtree,system-ui,sans-serif;min-height:44px}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.pop{min-height:64px;padding:10px 14px;border-radius:14px;background:var(--card);border:0;color:var(--ink);text-align:left;font:inherit}
+.pop b{display:block;font-size:15px}.pop small{color:var(--mute);font-size:13px}
+.srch{display:flex;align-items:center;gap:10px;min-height:54px;padding:0 14px;border-radius:14px;background:var(--card);border:1.5px solid var(--red)}
+.srch input{flex:1;border:0;outline:0;background:transparent;color:var(--ink);font:17px Figtree,system-ui,sans-serif;min-height:50px}
+.opts{display:grid;gap:8px}
+.opt{display:flex;gap:12px;align-items:flex-start;text-align:left;width:100%;padding:12px 14px;border-radius:16px;background:var(--card);color:var(--ink);border:2px solid var(--line);font:inherit}
+.opt[aria-pressed=true]{border-color:var(--red)}
+.opt>span:not(.box){flex:1;min-width:0;display:grid;gap:3px}.opt .h{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.opt .h em{margin-left:auto;font-style:normal;font-weight:800}
+.opt small{color:var(--mute);font-size:13px}.opt .chip{min-width:34px;height:26px;font-size:14px}
+.box{width:24px;height:24px;border-radius:7px;flex:none;border:2px solid #b9b9c0;display:grid;place-items:center;margin-top:2px;color:#fff}
+.opt[aria-pressed=true] .box{background:var(--red);border-color:var(--red)}
+.best{font-size:12px;font-weight:800;color:light-dark(#9e0c24,#ff9aa8);background:var(--soft);border-radius:999px;padding:3px 9px}
+.note{font-size:14px;color:var(--mute);margin:0}
+.wcard{background:var(--card);border-radius:16px;padding:12px 14px;display:grid;gap:10px}
+.wnm{display:flex;align-items:center;gap:10px;border-top:1px solid var(--line);padding-top:10px}.wnm label{font-size:14px;color:var(--mute);flex:none}
+.wnm input{flex:1;min-height:42px;border-radius:10px;border:1.5px solid var(--line);background:var(--card);color:var(--ink);font:700 16px Figtree,system-ui,sans-serif;padding:0 12px}
+.toast{position:fixed;left:50%;bottom:max(18px,env(safe-area-inset-bottom));transform:translateX(-50%);background:#111114;color:#fff;border-radius:14px;padding:12px 16px;font-size:14px;z-index:40;max-width:calc(100% - 28px)}
+.toast[hidden]{display:none}
 .status{display:flex;align-items:center;justify-content:space-between;gap:10px;max-width:640px;margin:8px auto 0;font-size:12px;opacity:.92}
 .status button{border:1.5px solid rgba(255,255,255,.7);background:transparent;color:#fff;border-radius:999px;min-height:30px;padding:0 12px;font:700 13px Figtree,system-ui,sans-serif}
 main{max-width:640px;margin:0 auto;padding:10px 10px 14px;display:grid;gap:10px}
@@ -86,9 +140,10 @@ footer{color:var(--mute);font-size:13px;text-align:center;padding:0 16px 28px}
 </style></head><body>
 <header>
   <div class="top"><h1>Mi bus</h1><div class="clock" id="clock"></div></div>
-  <div class="seg" role="group" aria-label="Trayecto">
-    <button id="t-ida" aria-pressed="true">Ir al trabajo</button>
-    <button id="t-vuelta" aria-pressed="false">Volver a casa</button>
+  <div class="trip">
+    <button class="cur" id="tripbtn" aria-haspopup="dialog"><span><b id="tripname">Casa → Trabajo</b><small id="triphint">Tu último trayecto</small></span>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+    <button class="swap" id="swap"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4v16M3 8l4-4 4 4M17 20V4M13 16l4 4 4-4"/></svg><span id="swaplbl">Volver</span></button>
   </div>
   <div class="status"><span id="upd">Cargando…</span><button id="refresh">Actualizar</button></div>
 </header>
@@ -108,10 +163,31 @@ footer{color:var(--mute);font-size:13px;text-align:center;padding:0 16px 28px}
   <div class="add">
     <input id="q" type="search" placeholder="Añadir parada: busca por calle (p. ej. Nelle)" autocomplete="off">
     <div class="res" id="res"></div>
-    <button class="tg" id="reset">Restablecer paradas por defecto</button>
+    <button class="tg" id="reset">Volver a calcular las paradas de este trayecto</button>
   </div>
   <button id="editbtn">Editar paradas</button>
 </div>
+<div class="sheet" id="sheet" hidden>
+  <button class="scrim" id="scrim" aria-label="Cerrar"></button>
+  <div class="pane" role="dialog" aria-modal="true" aria-labelledby="sheet-t">
+    <div class="grab"></div>
+    <h2 id="sheet-t">Tus trayectos</h2>
+    <div id="triplist" style="display:grid;gap:6px"></div>
+    <div class="acts">
+      <button class="act red" id="newtrip">+ Nuevo destino</button>
+      <button class="act" id="edittrip">Editar paradas de este trayecto</button>
+      <button class="act danger" id="deltrip">Borrar este trayecto</button>
+    </div>
+  </div>
+</div>
+<div class="wiz" id="wiz" hidden role="dialog" aria-modal="true" aria-labelledby="wt">
+  <header>
+    <div class="top"><button class="wnav" id="wback">‹ Atrás</button><span class="wstep" id="wstep">Paso 1 de 3</span></div>
+    <div class="prog" id="wprog"><i></i><i></i><i></i></div>
+  </header>
+  <div class="wb" id="wb"></div>
+</div>
+<div class="toast" id="toast" role="status" hidden></div>
 <footer>Tiempos en vivo de iTranvías (Compañía de Tranvías de A Coruña). Se actualiza cada 30 s.</footer>
 <script>
 {
@@ -186,8 +262,16 @@ const MARGEN_SALIDA = 3;   // mismos minutos de margen que el Worker (ascensor, 
 const ANDAR_M_MIN = 80;    // 4,8 km/h
 const RODEO = 1.3;         // la calle no va en línea recta
 let manual = false, byLoc = false, hiddenAt = 0, filt = null, manualFilt = false, nearId = null;
-let cfg = load();
-let tab = new Date().getHours() < 15 ? 'ida' : 'vuelta';
+// Trayectos guardados en el móvil: { trips: [{ id, origen:{nombre,pos}, destino:{nombre,pos}, ida:[…], vuelta:[…] }], cur, dir }
+// cfg es el trayecto abierto (sus ida/vuelta son las listas de paradas de siempre) y tab el sentido.
+const STORE_KEY = 'mibus-trips-v1';
+const CERCA_DESTINO_KM = 0.3;
+let store = loadStore();
+let cfg = curTrip();
+let tab = store.dir || (new Date().getHours() < 15 ? 'ida' : 'vuelta');
+// Si elegiste el sentido a mano hace menos de 5 min, se respeta aunque recargues.
+if (store.manualAt && Date.now() - store.manualAt < 5 * 60000) manual = true;
+try { if (!localStorage.getItem(STORE_KEY)) save(); } catch (e) {}
 const data = {};
 let lastAt = 0;
 const $ = (s) => document.getElementById(s);
@@ -199,7 +283,32 @@ function load() {
   try { const s = JSON.parse(localStorage.getItem('mibus-cfg-v4')); if (s && s.ida && s.vuelta) return s; } catch (e) {}
   return JSON.parse(JSON.stringify(DEF));
 }
-function save() { try { localStorage.setItem('mibus-cfg-v4', JSON.stringify(cfg)); } catch (e) {} }
+function loadStore() {
+  try { const s = JSON.parse(localStorage.getItem(STORE_KEY)); if (s && s.trips && s.trips.length) return s; } catch (e) {}
+  // Primera vez con trayectos: lo que tenías (o las paradas por defecto) pasa a ser «Casa → Trabajo».
+  const old = load();
+  return { trips: [{ id: 't1', origen: { nombre: 'Casa', pos: null }, destino: { nombre: 'Trabajo', pos: null }, ida: old.ida, vuelta: old.vuelta }], cur: 't1', dir: null };
+}
+function curTrip() { return store.trips.find((t) => t.id === store.cur) || store.trips[0]; }
+function save() { store.cur = cfg.id; store.dir = tab; try { localStorage.setItem(STORE_KEY, JSON.stringify(store)); } catch (e) {} }
+// Sin coordenadas guardadas (trayectos migrados), el centro de sus paradas.
+function endPos(t, which) { const e = t[which]; return (e && e.pos) || centre(which === 'origen' ? t.ida : t.vuelta); }
+function names(t, dir) { const a = t.origen.nombre, b = t.destino.nombre; return (dir || tab) === 'ida' ? { from: a, to: b } : { from: b, to: a }; }
+function renderTrip() {
+  const n = names(cfg);
+  $('tripname').textContent = n.from + ' → ' + n.to;
+  $('triphint').textContent = byLoc && !manual ? 'Cambiado porque estás cerca de ' + n.from : 'Tu último trayecto';
+  $('swaplbl').textContent = tab === 'ida' ? 'Volver' : 'Ir';
+  $('swap').setAttribute('aria-label', 'Cambiar a ' + n.to + ' → ' + n.from);
+  // «¿Qué bus cojo?» usa el horario de tu trayecto original en el Worker: solo para ese.
+  $('plan').hidden = cfg.id !== 't1';
+}
+function setTrip(id, dir) {
+  const t = store.trips.find((x) => x.id === id); if (!t) return;
+  cfg = t; tab = dir; manual = true; byLoc = false; filt = null; nearId = null;
+  store.manualAt = Date.now();
+  save(); render(); refresh();
+}
 function stopName(id) { return meta.stops[id] || FALL_STOPS[id] || ('Parada ' + id); }
 function lineInfo(id) {
   const m = meta.lines[id] || {}, f = FALL_LINES[id] || {};
@@ -209,9 +318,8 @@ function lineInfo(id) {
 }
 
 function render() {
-  if (render.tab !== tab) { render.tab = tab; planLabel(); }
-  $('t-ida').setAttribute('aria-pressed', tab === 'ida');
-  $('t-vuelta').setAttribute('aria-pressed', tab === 'vuelta');
+  if (render.tab !== tab + cfg.id) { render.tab = tab + cfg.id; planLabel(); }
+  renderTrip();
   const stops = cfg[tab];
   if (!stops.length) { $('list').innerHTML = '<div class="card"><p class="sub">No hay paradas. Pulsa «Editar paradas» para añadir una.</p></div>'; return; }
   if (!document.body.classList.contains('editing')) { renderList(stops); return; }
@@ -299,7 +407,7 @@ function renderList(allStops) {
   if (!rows && first) rows = '<div class="empty">No hay más buses de tus líneas.</div>';
   if (!rows) rows = '<div class="empty">' + (pending ? 'Consultando…' : (errs.length === stops.length ? 'No se pudo conectar con iTranvías. Pulsa Actualizar.' : 'Sin buses próximos ahora mismo.')) + '</div>';
   const note = errs.length && errs.length < stops.length ? '<div class="err">Sin datos ahora de: ' + errs.map(esc).join(', ') + '</div>' : '';
-  $('list').innerHTML = chips + hero + '<section class="card"><h2>' + (first ? 'Después, tus líneas ★' : (tab === 'ida' ? 'Buses al trabajo' : 'Buses a casa')) + '</h2>' +
+  $('list').innerHTML = chips + hero + '<section class="card"><h2>' + (first ? 'Después, tus líneas ★' : ('Buses a ' + esc(names(cfg).to))) + '</h2>' +
     (chips ? '<div class="sub"></div>' : '<div class="sub">' + stops.map((s) => esc(stopName(s.id))).join(' · ') + '</div>') + note + rows +
     (otherRows ? '<div class="sec">Otras líneas en estas paradas</div>' + otherRows : '') + '</section>';
 }
@@ -335,15 +443,17 @@ function autoTab() {
     navigator.geolocation.getCurrentPosition((p) => {
       here = { p: [p.coords.latitude, p.coords.longitude], acc: p.coords.accuracy || 9999, t: Date.now() };
       if (manual) { render(); return; }
-      const me = here.p, a = centre(cfg.ida), b = centre(cfg.vuelta);
-      if (!a || !b) return;
-      const t = km(me, a) <= km(me, b) ? 'ida' : 'vuelta';
-      byLoc = true;
+      // Abre el último trayecto; solo cambia de sentido si estás a menos de 300 m de su final
+      // (en el destino → vuelta; en el origen con la vuelta abierta → ida).
+      const me = here.p, a = endPos(cfg, 'origen'), b = endPos(cfg, 'destino');
+      let t = tab;
+      if (tab === 'ida' && b && km(me, b) <= CERCA_DESTINO_KM) { t = 'vuelta'; byLoc = true; }
+      else if (tab === 'vuelta' && a && km(me, a) <= CERCA_DESTINO_KM) { t = 'ida'; byLoc = true; }
       let near = null, nd = Infinity;
       for (const s of cfg[t]) { const q = posOf(s.id); if (q) { const d = km(me, q); if (d < nd) { nd = d; near = s.id; } } }
       nearId = nd <= 0.2 ? near : null;
       const changed = t !== tab;
-      if (changed) { tab = t; filt = null; manualFilt = false; }
+      if (changed) { tab = t; filt = null; manualFilt = false; save(); }
       if (!manualFilt) filt = nearId;
       render();
       if (changed) refresh(); else tick();
@@ -385,11 +495,42 @@ function tick() {
   }
 }
 
-$('t-ida').onclick = () => { manual = true; filt = null; nearId = null; tab = 'ida'; render(); refresh(); };
-$('t-vuelta').onclick = () => { manual = true; filt = null; nearId = null; tab = 'vuelta'; render(); refresh(); };
+$('swap').onclick = () => setTrip(cfg.id, tab === 'ida' ? 'vuelta' : 'ida');
+let delArmed = false;
+function openSheet() {
+  delArmed = false;
+  $('deltrip').textContent = 'Borrar este trayecto';
+  $('deltrip').hidden = store.trips.length < 2;
+  $('triplist').innerHTML = store.trips.map((t) => ['ida', 'vuelta'].map((d) => {
+    const n = names(t, d), on = t === cfg && d === tab;
+    const sub = t[d].map((s) => shortName(s.id) + (s.lines ? ' (' + s.lines.map((l) => lineInfo(l).n).join(', ') + ')' : '')).join(' · ');
+    return '<button class="topt" data-trip="' + esc(t.id) + '" data-dir="' + d + '" aria-pressed="' + on + '"><span><b>' + esc(n.from) + ' → ' + esc(n.to) + '</b><small>' + esc(sub || 'Sin paradas') + '</small></span>' +
+      (on ? '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#c8102e" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"/></svg>' : '') + '</button>';
+  }).join('')).join('');
+  $('sheet').hidden = false;
+  const first = $('triplist').querySelector('[aria-pressed=true]'); if (first) first.focus();
+}
+function closeSheet() { $('sheet').hidden = true; $('tripbtn').focus(); }
+$('tripbtn').onclick = openSheet;
+$('scrim').onclick = closeSheet;
+$('sheet').addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSheet(); });
+$('triplist').onclick = (e) => { const b = e.target.closest('[data-trip]'); if (!b) return; $('sheet').hidden = true; setTrip(b.dataset.trip, b.dataset.dir); };
+$('edittrip').onclick = () => {
+  $('sheet').hidden = true;
+  if (!document.body.classList.contains('editing')) $('editbtn').click();
+  $('list').scrollIntoView({ behavior: 'smooth' });
+};
+$('deltrip').onclick = () => {
+  if (store.trips.length < 2) return;
+  if (!delArmed) { delArmed = true; $('deltrip').textContent = 'Toca otra vez para borrar ' + names(cfg, 'ida').from + ' → ' + names(cfg, 'ida').to; return; }
+  store.trips = store.trips.filter((t) => t !== cfg);
+  $('sheet').hidden = true;
+  setTrip(store.trips[0].id, 'ida');
+};
 $('refresh').onclick = refresh;
 $('editbtn').onclick = () => { const on = document.body.classList.toggle('editing'); $('editbtn').textContent = on ? 'Listo' : 'Editar paradas'; render(); };
-$('reset').onclick = () => { cfg = JSON.parse(JSON.stringify(DEF)); save(); render(); refresh(); };
+$('reset').onclick = () => openWizard({ trip: cfg });
+$('newtrip').onclick = () => { $('sheet').hidden = true; openWizard({}); };
 $('list').onclick = (e) => {
   const b = e.target.closest('button'); if (!b) return;
   if (b.dataset.f != null) { filt = b.dataset.f ? Number(b.dataset.f) : null; manualFilt = true; render(); return; }
@@ -430,11 +571,208 @@ async function runPlan() {
     $('pr').innerHTML = (p.tipo ? '<div class="sub">' + esc(p.tipo) + '</div>' : '') + opts.map((o) => {
       const li = lineInfo(o.lineId);
       return '<div class="row pr"><div class="chip" style="background:' + li.c + '">' + esc(li.n) + '</div><div class="mid"><div class="min">' + esc(o.bus) + (o.main ? '<span class="fav">★</span>' : '') + '</div>' +
-        '<div class="stp">' + esc(o.stop) + '</div></div><div class="at"><b>' + esc(o.arrive) + '</b><span>' + (tab === 'ida' ? 'llegas' : 'en casa') + '</span></div></div>';
+        '<div class="stp">' + esc(o.stop) + '</div></div><div class="at"><b>' + esc(o.arrive) + '</b><span>' + 'llegas' + '</span></div></div>';
     }).join('');
   } catch (e) { $('pr').innerHTML = '<div class="err">No se pudo consultar el horario. Prueba otra vez.</div>'; }
 }
 $('pb').onclick = runPlan;
+
+// ---------- «Configura tu trayecto»: origen → destino → paradas ----------
+// planner.js, buscador.js y los recorridos se cargan solo al abrir el asistente.
+const PAGES = /github\.io$|^localhost$|^127\./.test(location.hostname) || location.protocol === 'file:' ? '' : 'https://yomergonzalez.github.io/Mibus/';
+let libs = null, W = null, wTimer = 0;
+function loadScript(src) { return new Promise((ok, ko) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = ko; document.head.appendChild(s); }); }
+function ensureLibs() {
+  if (!libs) libs = Promise.all([
+    window.MiBusPlanner ? 0 : loadScript(PAGES + 'planner.js'),
+    window.MiBusBuscador ? 0 : loadScript(PAGES + 'buscador.js'),
+    fetch(PAGES + 'gtfs/meta.json').then((r) => r.json()),
+    fetch(PAGES + 'gtfs/routes.json').then((r) => r.json()),
+  ]).then((x) => ({ P: window.MiBusPlanner.crear({ meta: x[2], routes: x[3] }), B: window.MiBusBuscador, meta: x[2] }))
+    .catch((e) => { libs = null; throw e; });
+  return libs;
+}
+const ICON_PIN = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>';
+const ICON_CHECK = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"/></svg>';
+const TIPO = { popular: 'Sitio', sitio: 'Sitio', direccion: 'Dirección', calle: 'Calle', parada: 'Parada' };
+const chipsOf = (ids) => '<span class="lc">' + ids.map((l) => { const m = W && W.lib && W.lib.meta.lines[l]; const li = m ? { n: m.n, c: /^#[0-9a-f]{3,8}$/i.test(m.c || '') ? m.c : lineInfo(Number(l)).c } : lineInfo(Number(l)); return '<span class="chip" style="background:' + li.c + '">' + esc(li.n) + '</span>'; }).join('') + '</span>';
+const okey = (o) => o.linea + '|' + o.sube.id;
+
+function openWizard(o) {
+  W = { step: 1, mode: 'loc', origen: null, destino: null, q: '', res: [], locating: false, err: '', opts: null, vuelta: [], sel: new Set(), nombre: '', trip: o.trip || null, lib: null };
+  if (W.trip) {
+    W.origen = { nombre: W.trip.origen.nombre, pos: endPos(W.trip, 'origen') };
+    W.destino = { nombre: W.trip.destino.nombre, pos: endPos(W.trip, 'destino') };
+    W.nombre = W.trip.destino.nombre; W.step = 3;
+  }
+  $('wiz').hidden = false; document.body.style.overflow = 'hidden';
+  wRender();
+  ensureLibs().then((l) => { if (!W) return; W.lib = l; if (W.step === 3) wCompute(); wRender(); })
+    .catch(() => { if (W) { W.err = 'No se pudieron cargar las paradas. Comprueba la conexión y vuelve a intentarlo.'; wRender(); } });
+  if (!W.trip) wLocate();
+}
+function closeWizard() { W = null; $('wiz').hidden = true; document.body.style.overflow = ''; }
+function toast(t) { const el = $('toast'); el.textContent = t; el.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => { el.hidden = true; }, 4000); }
+
+function wLocate() {
+  W.mode = 'loc'; W.err = '';
+  if (!navigator.geolocation) { W.mode = 'type'; W.err = 'Tu navegador no da la ubicación. Escribe tu calle o tu parada.'; wRender(); return; }
+  W.locating = true; wRender();
+  navigator.geolocation.getCurrentPosition((p) => {
+    if (!W) return;
+    W.locating = false; W.origen = { nombre: 'Casa', pos: [p.coords.latitude, p.coords.longitude], aqui: true }; wRender();
+  }, () => {
+    if (!W) return;
+    W.locating = false; W.mode = 'type'; W.err = 'No pudimos ver tu ubicación. Escribe tu calle o tu parada.'; wRender();
+  }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
+}
+
+function wCompute() {
+  const P = W.lib.P, r = { radioOrigenM: 600, radioDestinoM: 400 };
+  W.opts = P.mejoresPorLinea(P.opcionesDirectas(W.origen.pos, W.destino.pos, r));
+  W.vuelta = P.mejoresPorLinea(P.opcionesDirectas(W.destino.pos, W.origen.pos, r));
+  W.sel = new Set();
+  if (W.trip) for (const o of W.opts) { const s = W.trip.ida.find((x) => String(x.id) === o.sube.id); if (s && (!s.lines || s.lines.indexOf(Number(o.linea)) >= 0)) W.sel.add(okey(o)); }
+  if (!W.sel.size && W.opts.length) { const best = W.opts[0].total; W.opts.filter((o) => o.total <= best + 5).slice(0, 3).forEach((o) => W.sel.add(okey(o))); }
+}
+function wVuelta() {
+  const lines = new Set(W.opts.filter((o) => W.sel.has(okey(o))).map((o) => o.linea));
+  const v = W.vuelta.filter((o) => lines.has(o.linea));
+  return v.length ? v : W.vuelta.slice(0, 2);
+}
+function groupStops(list) {
+  const out = [];
+  for (const o of list) {
+    let s = out.find((x) => x.id === Number(o.sube.id));
+    if (!s) { s = { id: Number(o.sube.id), lines: [] }; out.push(s); }
+    if (s.lines.indexOf(Number(o.linea)) < 0) s.lines.push(Number(o.linea));
+  }
+  return out;
+}
+function wSave() {
+  const chosen = W.opts.filter((o) => W.sel.has(okey(o)));
+  if (!chosen.length) return;
+  const nombre = (W.nombre || W.destino.nombre || '').trim().slice(0, 40) || 'Destino';
+  const d = { origen: { nombre: (W.origen.nombre || 'Casa'), pos: W.origen.pos }, destino: { nombre, pos: W.destino.pos }, ida: groupStops(chosen), vuelta: groupStops(wVuelta()) };
+  let t = W.trip;
+  if (t) Object.assign(t, d); else { t = Object.assign({ id: 't' + Date.now().toString(36) }, d); store.trips.push(t); }
+  closeWizard();
+  if (document.body.classList.contains('editing')) $('editbtn').click();
+  setTrip(t.id, 'ida');
+  toast('Trayecto guardado. La vuelta también está lista.');
+}
+
+function wSearchHTML(forOrigen) {
+  return '<div><h2 id="wt">' + (forOrigen ? '¿Desde dónde sales?' : '¿A dónde vas?') + '</h2><p class="lead">' +
+    (forOrigen ? 'Escribe tu calle con número, o tu parada.' : 'Una calle, un número o un sitio. No hace falta saber la parada.') + '</p></div>' +
+    (W.err && forOrigen ? '<p class="note">' + esc(W.err) + '</p>' : '') +
+    '<label class="srch"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>' +
+    '<input id="wq" type="search" autocomplete="off" enterkeyhint="search" aria-label="' + (forOrigen ? 'Desde dónde sales' : 'A dónde vas') + '" placeholder="' + (forOrigen ? 'Ej.: Ronda de Nelle 100' : 'Ej.: Ronda de Outeiro 200, Hospital…') + '" value="' + esc(W.q) + '"></label>' +
+    '<div id="wres" style="display:grid;gap:16px"></div>' +
+    (forOrigen ? '<button class="ghost" data-a="loc">Usar mi ubicación</button>' : '');
+}
+function wRenderRes() {
+  const box = $('wres'); if (!box || !W) return;
+  if (!W.lib) { box.innerHTML = '<p class="note">Cargando…</p>'; return; }
+  const forOrigen = W.step === 1;
+  if (!W.q.trim()) {
+    if (forOrigen) { box.innerHTML = ''; return; }
+    W.res = W.lib.B.populares('');
+    box.innerHTML = '<div class="lab">Sitios populares</div><div class="grid2">' + W.res.map((r, i) => '<button class="pop" data-k="' + i + '"><b>' + esc(r.nombre) + '</b><small>' + esc(r.detalle) + '</small></button>').join('') + '</div>' +
+      '<p class="note">¿No sabes la dirección? Vuelve cuando estés allí y busca por el nombre de la calle.</p>';
+    return;
+  }
+  box.innerHTML = W.res.length ? '<div class="lst">' + W.res.map((r, i) => '<button data-k="' + i + '"><span><b>' + esc(r.nombre) + '</b><small>' + esc(TIPO[r.tipo] || '') + (r.detalle ? ' · ' + esc(r.detalle) : '') + '</small></span></button>').join('') + '</div>' +
+    (W.searching ? '<p class="note">Buscando más…</p>' : '') :
+    '<p class="note">' + (W.searching ? 'Buscando…' : 'Sin resultados. Prueba con el nombre de la calle o de un sitio conocido.') + '</p>';
+}
+function wSearch() {
+  const q = W.q;
+  if (!W.lib) { wRenderRes(); return; }
+  W.res = W.lib.B.mezclar(q, [], W.lib.meta);
+  W.searching = q.trim().length >= 3;
+  wRenderRes();
+  clearTimeout(wTimer);
+  if (!W.searching) return;
+  wTimer = setTimeout(async () => {
+    const near = (W.origen && W.origen.pos) || (here && here.p) || null;
+    const rem = await W.lib.B.remoto(q, { base: PROXY, cerca: near });
+    if (!W || W.q !== q) return;
+    W.searching = false;
+    W.res = W.lib.B.mezclar(q, rem, W.lib.meta);
+    wRenderRes();
+  }, 350);
+}
+
+function wRender() {
+  if (!W) return;
+  $('wstep').textContent = 'Paso ' + W.step + ' de 3';
+  [...$('wprog').children].forEach((el, i) => el.classList.toggle('on', i < W.step));
+  $('wback').textContent = W.step === 1 || (W.trip && W.step === 3) ? '✕ Cerrar' : '‹ Atrás';
+  let h = '';
+  if (W.step === 1 && W.mode === 'type' && !W.origen) h = wSearchHTML(true);
+  else if (W.step === 1) {
+    h = '<div><h2 id="wt">¿Desde dónde sales?</h2><p class="lead">Normalmente, tu casa. Usamos tu ubicación solo para esto.</p></div>';
+    if (W.locating) h += '<div class="here">' + ICON_PIN + '<span><b>Buscando tu ubicación…</b><small>Si el móvil te pregunta, permite la ubicación.</small></span></div>';
+    if (W.origen) {
+      const near = W.lib ? W.lib.P.paradasCerca(W.origen.pos, 600, 6) : null;
+      h += '<div class="here">' + ICON_PIN + '<span><b>' + esc(W.origen.label || (near && near[0] ? 'Estás cerca de ' + near[0].nombre : 'Tu ubicación')) + '</b><small>' + (W.origen.aqui ? 'Ubicación actual' : 'Punto de salida') + '</small></span><button data-a="type">Cambiar</button></div>';
+      h += '<div class="lab">Paradas a menos de 10 min andando</div>';
+      if (!near) h += '<p class="note">' + esc(W.err || 'Cargando paradas…') + '</p>';
+      else if (!near.length) h += '<p class="note">No hay paradas de bus a menos de 10 minutos de aquí.</p>';
+      else h += '<div class="lst">' + near.map((p) => '<div><span><b>' + esc(p.nombre) + '</b><small>' + p.minAndando + ' min andando</small></span>' + chipsOf(p.lineas) + '</div>').join('') + '</div>' +
+        '<p class="note">No tienes que elegir ahora: en el paso 3 marcamos solas las que te llevan a tu destino.</p>';
+      h += '<button class="bigbtn" data-a="next"' + (near && near.length ? '' : ' disabled') + '>Siguiente: ¿a dónde vas?</button>';
+    }
+    if (!W.origen && !W.locating) h += '<button class="bigbtn" data-a="loc">Usar mi ubicación</button>';
+    if (!W.locating) h += '<button class="ghost" data-a="type">Prefiero escribir mi calle</button>';
+  } else if (W.step === 2) h = wSearchHTML(false);
+  else {
+    h = '<div><h2 id="wt">Así llegas a ' + esc(W.destino.nombre) + '</h2><p class="lead">Hemos marcado las paradas con bus directo. Toca una para quitarla o añadirla.</p></div>';
+    if (!W.opts) h += '<p class="note">' + esc(W.err || 'Calculando…') + '</p>';
+    else if (!W.opts.length) h += '<div class="wcard"><b>No hay ningún bus directo hasta aquí</b><p class="note">Este viaje necesita transbordo. Lo añadiremos pronto. Mientras, prueba con un destino cercano.</p></div><button class="ghost" data-a="dest">Elegir otro destino</button>';
+    else {
+      h += '<div class="opts">' + W.opts.map((o, i) => {
+        const on = W.sel.has(okey(o));
+        return '<button class="opt" data-o="' + i + '" aria-pressed="' + on + '"><span class="box">' + (on ? ICON_CHECK : '') + '</span><span>' +
+          '<span class="h">' + chipsOf([o.linea]) + (i === 0 ? '<span class="best">Más rápido</span>' : '') + '<em>' + o.total + ' min</em></span>' +
+          '<b>' + esc(o.sube.nombre) + '</b><small>' + o.minAndandoIni + ' min a pie · ' + o.minBus + ' en bus · bajas en ' + esc(o.baja.nombre) + '</small></span></button>';
+      }).join('') + '</div>';
+      const v = wVuelta(), n = W.sel.size;
+      h += '<div class="wcard"><div><b>La vuelta se crea sola</b><p class="note">' + (v.length ? v.map((o) => esc(o.nombreLinea) + ' desde ' + esc(o.sube.nombre)).join(' · ') : 'No hay bus directo de vuelta; la vuelta quedará vacía.') + '</p></div>' +
+        '<div class="wnm"><label for="wname">Llamar a este destino</label><input id="wname" maxlength="40" value="' + esc(W.nombre || W.destino.nombre) + '"></div></div>' +
+        '<button class="bigbtn" data-a="save"' + (n ? '' : ' disabled') + '>Guardar trayecto' + (n ? ' (' + n + (n === 1 ? ' línea' : ' líneas') + ')' : '') + '</button>';
+    }
+  }
+  $('wb').innerHTML = h;
+  const q = $('wq');
+  if (q) { q.oninput = () => { W.q = q.value; wSearch(); }; wSearch(); if (W.step === 2 || W.mode === 'type') q.focus(); }
+  const nm = $('wname'); if (nm) nm.oninput = () => { W.nombre = nm.value; };
+}
+$('wb').onclick = (e) => {
+  const b = e.target.closest('button'); if (!b || !W) return;
+  const a = b.dataset.a;
+  if (a === 'next') { W.step = 2; W.q = ''; wRender(); }
+  else if (a === 'type') { W.mode = 'type'; W.origen = null; W.q = ''; W.err = ''; wRender(); }
+  else if (a === 'loc') wLocate();
+  else if (a === 'dest') { W.step = 2; W.q = ''; W.opts = null; wRender(); }
+  else if (a === 'save') wSave();
+  else if (b.dataset.k != null) {
+    const r = W.res[Number(b.dataset.k)]; if (!r) return;
+    if (W.step === 1) { W.origen = { nombre: 'Casa', pos: r.pos, label: r.nombre }; W.mode = 'loc'; W.q = ''; wRender(); }
+    else { W.destino = { nombre: r.nombre, pos: r.pos }; W.nombre = r.nombre; W.step = 3; W.opts = null; if (W.lib) wCompute(); wRender(); }
+  } else if (b.dataset.o != null) {
+    const o = W.opts[Number(b.dataset.o)], k = okey(o);
+    if (W.sel.has(k)) W.sel.delete(k); else W.sel.add(k);
+    wRender();
+  }
+};
+$('wback').onclick = () => {
+  if (!W) return;
+  if (W.step === 1 || (W.trip && W.step === 3)) { closeWizard(); return; }
+  W.step -= 1; W.q = ''; wRender();
+};
+$('wiz').addEventListener('keydown', (e) => { if (e.key === 'Escape') closeWizard(); });
 
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) { hiddenAt = Date.now(); return; }
