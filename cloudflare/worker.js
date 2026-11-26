@@ -1169,7 +1169,7 @@ const MCP_TOOLS = [
       const meta = await pubMeta();
       const lineId = a.linea ? findLine(meta, a.linea) : null;
       if (a.linea && !lineId) return 'No conozco la línea «' + a.linea + '».';
-      const trip = defaultTrip('mcp', madridNow().min);
+      let trip = defaultTrip('mcp', madridNow().min);
       const mine = [...new Set(ALEXA_TRIPS.ida.concat(ALEXA_TRIPS.vuelta).map((x) => x.id))];
       let stops = [], walk = null;
       if (a.numero_parada) {
@@ -1184,9 +1184,18 @@ const MCP_TOOLS = [
         }
         stops = [f.id];
       } else {
-        stops = ALEXA_TRIPS[trip].map((x) => x.id);
+        // Con una línea, solo las paradas del trayecto por las que pasa (el 14 no pasa por
+        // Nelle ni el 12 por Outeiro 249). Si no pasa por ninguna, se prueba el otro trayecto.
+        let list = ALEXA_TRIPS[trip];
+        if (lineId) {
+          const has = (x) => x.lines.indexOf(lineId) >= 0;
+          const other = trip === 'ida' ? 'vuelta' : 'ida';
+          if (list.some(has)) list = list.filter(has);
+          else if (ALEXA_TRIPS[other].some(has)) { trip = other; list = ALEXA_TRIPS[other].filter(has); }
+        }
+        stops = list.map((x) => x.id);
         walk = {};
-        for (const x of ALEXA_TRIPS[trip]) walk[x.id] = x.walk;
+        for (const x of list) walk[x.id] = x.walk;
       }
       const boards = await uiBoards(meta, stops, { lineId, walk });
       const title = lineId ? 'Línea ' + pubLineName(meta, lineId) + (stops.length === 1 ? ' · ' + pubStopName(meta, stops[0]) : ' · tus paradas de ' + trip) : pubStopName(meta, stops[0]);
@@ -1488,7 +1497,7 @@ function pubStopRaw(id) {
       const { r, j } = await upstreamJSON(API + "?dato=" + id + "&func=0", { headers: UPSTREAM_HEADERS, cache: "no-store" });
       if (!r.ok) throw new Error("iTranvías " + r.status);
       const prev = lastGood.get(id) || shared;
-      const d = { at: Date.now(), lineas: withGhosts(prev, (j.buses && j.buses.lineas) || []) };
+      const d = { at: Date.now(), lineas: withGhosts(prev, dedupeBuses((j.buses && j.buses.lineas) || [])) };
       lastGood.set(id, d);
       await stopCachePut(id, d);
       return d;
@@ -1509,6 +1518,28 @@ function pubStopRaw(id) {
 //    hasta 10 min con su hora estimada y sinSenal: true.
 // 2) fillFromSchedule: horas del horario (próximos 60 min) sin ningún bus en vivo cerca
 //    (de 3 min antes a 8 min después) se añaden con programado: true.
+// iTranvías a veces lista el mismo bus dos veces durante un momento (26 nov: dos 12 en Nelle,
+// ambos a 22 min, a 4,1 y 4,2 km; un minuto después solo uno). Por línea se quita el repetido:
+// mismo número de coche (campo bus) con ≤ 2 min de diferencia, o, sin número, ≤ 1 min y ≤ 300 m.
+// Si fueran dos coches pegados, para el usuario es el mismo paso.
+function dedupeBuses(lineas) {
+  return lineas.map((l) => {
+    const keep = [];
+    const sorted = (l.buses || []).slice().sort((a, b) => parseMin(a.tiempo) - parseMin(b.tiempo));
+    for (const b of sorted) {
+      const t = parseMin(b.tiempo), m = Number(b.distancia);
+      const dup = keep.some((k) => {
+        const dt = Math.abs(parseMin(k.tiempo) - t);
+        if (b.bus != null && k.bus != null && String(b.bus) === String(k.bus)) return dt <= 2;
+        const km = Number(k.distancia);
+        return dt <= 1 && Number.isFinite(m) && Number.isFinite(km) && Math.abs(km - m) <= 300;
+      });
+      if (!dup) keep.push(b);
+    }
+    return { ...l, buses: keep };
+  });
+}
+
 var GHOST_MAX = 10 * 60e3;
 function withGhosts(prev, lineas) {
   if (!prev || !prev.lineas) return lineas;
