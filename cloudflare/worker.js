@@ -129,7 +129,27 @@ async function handle(req, env, ctx) {
       return new Response(ICON, { headers: { 'content-type': 'image/svg+xml', 'cache-control': 'public, max-age=604800' } });
     }
 
+    // Archivos de la web (asistente, «Añadir parada», «Editar paradas»): el Worker los sirve
+    // desde GitHub Pages en su propio dominio, para que la web los pida siempre a su mismo origen.
+    if (/^\/(planner\.js|buscador\.js|gtfs\/[a-z0-9_-]+(\/[a-z0-9_-]+)?\.json)$/i.test(url.pathname)) return serveStatic(url.pathname.slice(1));
+
     return serveApp();
+}
+
+async function serveStatic(path) {
+  const type = /\.js$/.test(path) ? 'text/javascript; charset=utf-8' : 'application/json; charset=utf-8';
+  try {
+    const body = await pubMemo('app:' + path, 10 * 60e3, async () => {
+      const r = await fetch(APP_URL + path);
+      if (r.status === 404) return null;
+      if (!r.ok) throw new Error('Pages ' + r.status);
+      return r.text();
+    });
+    if (body == null) return new Response('no existe', { status: 404 });
+    return new Response(body, { headers: { 'content-type': type, 'cache-control': 'public, max-age=600', 'access-control-allow-origin': '*' } });
+  } catch (e) {
+    return new Response('GitHub Pages no responde', { status: 502 });
+  }
 }
 
 // La web es una sola: index.html de GitHub Pages. El Worker la sirve tal cual en su dominio
