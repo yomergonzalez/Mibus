@@ -52,6 +52,8 @@ h1{font-size:22px;line-height:1.05;margin:0;font-weight:800}
 .lead{margin:4px 0 0;color:var(--mute);font-size:15px}
 .bigbtn{min-height:54px;border-radius:14px;border:0;background:var(--red);color:#fff;font:800 17px Figtree,system-ui,sans-serif;width:100%}
 .bigbtn:disabled{opacity:.45}
+/* Botón principal del asistente siempre a la vista, pegado abajo aunque la lista sea larga */
+.wfoot{position:sticky;bottom:0;z-index:2;margin:0 -16px -28px;padding:14px 16px max(16px,env(safe-area-inset-bottom));background:linear-gradient(to bottom,transparent,var(--bg) 14px)}
 .ghost{min-height:44px;border:0;background:transparent;color:var(--ink);font:700 15px Figtree,system-ui,sans-serif}
 .lab{font-size:13px;font-weight:700;color:var(--mute);text-transform:uppercase;letter-spacing:.04em;margin-bottom:-8px}
 .lst{background:var(--card);border-radius:16px;overflow:hidden}
@@ -77,7 +79,7 @@ h1{font-size:22px;line-height:1.05;margin:0;font-weight:800}
 .best{font-size:12px;font-weight:800;color:light-dark(#9e0c24,#ff9aa8);background:var(--soft);border-radius:999px;padding:3px 9px}
 .note{font-size:14px;color:var(--mute);margin:0}
 .wcard{background:var(--card);border-radius:16px;padding:12px 14px;display:grid;gap:10px}
-.wnm{display:flex;align-items:center;gap:10px;border-top:1px solid var(--line);padding-top:10px}.wnm label{font-size:14px;color:var(--mute);flex:none}
+.wnm{display:flex;align-items:center;gap:10px;border-top:1px solid var(--line);padding-top:10px}.wnm label{font-size:14px;color:var(--mute);flex:none;min-width:80px}
 .wnm input{flex:1;min-height:42px;border-radius:10px;border:1.5px solid var(--line);background:var(--card);color:var(--ink);font:700 16px Figtree,system-ui,sans-serif;padding:0 12px}
 .toast{position:fixed;left:50%;bottom:max(18px,env(safe-area-inset-bottom));transform:translateX(-50%);background:#111114;color:#fff;border-radius:14px;padding:12px 16px;font-size:14px;z-index:40;max-width:calc(100% - 28px)}
 .toast[hidden]{display:none}
@@ -919,7 +921,7 @@ function wSave() {
   const ida = chosenStops(W.ida);
   if (!ida.length) return;
   const nombre = (W.nombre || W.destino.nombre || '').trim().slice(0, 40) || 'Destino';
-  const d = { origen: { nombre: (W.origen.nombre || 'Casa'), pos: W.origen.pos }, destino: { nombre, pos: W.destino.pos }, ida, vuelta: chosenStops(W.vta) };
+  const d = { origen: { nombre: (W.origen.nombre || '').trim().slice(0, 40) || 'Casa', pos: W.origen.pos }, destino: { nombre, pos: W.destino.pos }, ida, vuelta: chosenStops(W.vta) };
   let t = W.trip;
   if (t) Object.assign(t, d); else { t = Object.assign({ id: 't' + Date.now().toString(36) }, d); store.trips.push(t); }
   closeWizard();
@@ -978,7 +980,7 @@ function wRender() {
   let h = '';
   if (W.step === 1 && W.mode === 'type' && !W.origen) h = wSearchHTML(true);
   else if (W.step === 1) {
-    h = '<div><h2 id="wt">¿Desde dónde sales?</h2><p class="lead">Normalmente, tu casa. Usamos tu ubicación solo para esto.</p></div>';
+    h = '<div><h2 id="wt">¿Desde dónde sales?</h2><p class="lead">Tu casa o el sitio desde el que sueles salir. Al final le pones el nombre que quieras.</p></div>';
     if (W.locating) h += '<div class="here">' + ICON_PIN + '<span><b>Buscando tu ubicación…</b><small>Si el móvil te pregunta, permite la ubicación.</small></span></div>';
     if (W.origen) {
       const near = W.lib ? W.lib.P.paradasCerca(W.origen.pos, 600, 6) : null;
@@ -988,10 +990,11 @@ function wRender() {
       else if (!near.length) h += '<p class="note">No hay paradas de bus a menos de 10 minutos de aquí.</p>';
       else h += '<div class="lst">' + near.map((p) => '<div><span><b>' + esc(p.nombre) + '</b><small>' + p.minAndando + ' min andando</small></span>' + chipsOf(p.lineas) + '</div>').join('') + '</div>' +
         '<p class="note">No tienes que elegir ahora: en el paso 3 marcamos solas las que te llevan a tu destino.</p>';
-      h += '<button class="bigbtn" data-a="next"' + (near && near.length ? '' : ' disabled') + '>Siguiente: ¿a dónde vas?</button>';
+      h += '<div class="wfoot"><button class="bigbtn" data-a="next"' + (near && near.length ? '' : ' disabled') + '>Siguiente: ¿a dónde vas?</button></div>';
     }
     if (!W.origen && !W.locating) h += '<button class="bigbtn" data-a="loc">Usar mi ubicación</button>';
-    if (!W.locating) h += '<button class="ghost" data-a="type">Prefiero escribir mi calle</button>';
+    // Con la ubicación ya puesta, «Cambiar» hace lo mismo que «Prefiero escribir mi calle».
+    if (!W.locating && !W.origen) h += '<button class="ghost" data-a="type">Prefiero escribir mi calle</button>';
   } else if (W.step === 2) h = wSearchHTML(false);
   else {
     h = '<div><h2 id="wt">Así llegas a ' + esc(W.destino.nombre) + '</h2><p class="lead">Hemos marcado las paradas más rápidas con bus directo, para ir y para volver. Toca una para quitarla o añadirla.</p></div>';
@@ -1008,14 +1011,16 @@ function wRender() {
       h += '<div class="lab">Para ir · ' + esc(W.origen.nombre || 'Casa') + ' → ' + esc(W.destino.nombre) + '</div><div class="opts">' + W.ida.list.map((x) => card('ida', x)).join('') + '</div>';
       h += '<div class="lab">Para volver · ' + esc(W.destino.nombre) + ' → ' + esc(W.origen.nombre || 'Casa') + '</div>' +
         (W.vta.list.length ? '<div class="opts">' + W.vta.list.map((x) => card('vta', x)).join('') + '</div>' : '<p class="note">No hay bus directo de vuelta; la vuelta quedará vacía.</p>');
-      h += '<div class="wcard"><div class="wnm" style="border:0;padding:0"><label for="wname">Llamar a este destino</label><input id="wname" maxlength="40" value="' + esc(W.nombre || W.destino.nombre) + '"></div></div>' +
-        '<button class="bigbtn" data-a="save"' + (n ? '' : ' disabled') + '>' + (n ? 'Guardar trayecto' : 'Marca al menos una parada para ir') + '</button>';
+      h += '<div class="wcard"><div class="wnm" style="border:0;padding:0"><label for="worig">Sales desde</label><input id="worig" maxlength="40" value="' + esc(W.origen.nombre || 'Casa') + '"></div>' +
+        '<div class="wnm"><label for="wname">Vas a</label><input id="wname" maxlength="40" value="' + esc(W.nombre || W.destino.nombre) + '"></div></div>' +
+        '<div class="wfoot"><button class="bigbtn" data-a="save"' + (n ? '' : ' disabled') + '>' + (n ? 'Guardar trayecto' : 'Marca al menos una parada para ir') + '</button></div>';
     }
   }
   $('wb').innerHTML = h;
   const q = $('wq');
   if (q) { q.oninput = () => { W.q = q.value; wSearch(); }; wSearch(); if (W.step === 2 || W.mode === 'type') q.focus(); }
   const nm = $('wname'); if (nm) nm.oninput = () => { W.nombre = nm.value; };
+  const og = $('worig'); if (og) og.oninput = () => { W.origen.nombre = og.value; };
 }
 $('wb').onclick = (e) => {
   const b = e.target.closest('button'); if (!b || !W) return;
