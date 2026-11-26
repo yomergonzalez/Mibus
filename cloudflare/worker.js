@@ -797,6 +797,7 @@ async function uiBoards(meta, stops, opts = {}) {
       const info = meta.lines[l.linea] || {};
       for (const bus of (l.buses || []).slice(0, 4)) {
         const min = Math.max(0, Math.round(parseMin(bus.tiempo) - elapsed));
+        if ((d.programado || bus.programado) && min < 1) continue; // sin GPS no hay "llegando"
         const fuente = d.programado || bus.programado ? "horario" : bus.sinSenal ? "sinsenal" : d.stale ? "viejo" : "vivo";
         out.push({ linea: pubLineName(meta, l.linea), color: info.c || null, min, hora: fmt(now + min), metros: Number(bus.distancia) || null, fuente });
       }
@@ -968,7 +969,7 @@ footer{color:var(--tx3);font-size:11px;margin-top:8px}
       if (p.programado) h += '<div class="stale">🕒 Horario programado: iTranvías no responde, no es tiempo real</div>';
       if (p.stale) h += '<div class="stale">Dato de hace ' + Math.max(1, Math.round((p.edad_s || 0) / 60) + drift) + " min (iTranvías no responde)</div>";
       // En un trayecto solo se muestran los buses a los que llegas andando; como mucho 4 por parada.
-      var list = (p.llegadas || []).filter(function(b){ return b.min - drift >= (p.andando != null ? p.andando : 0); }).slice(0, 4);
+      var list = (p.llegadas || []).filter(function(b){ var m = b.min - drift; if ((p.programado || b.fuente === "horario") && m < 1) return false; return m >= (p.andando != null ? p.andando : 0); }).slice(0, 4);
       if (p.error && !(p.llegadas || []).length) h += '<div class="err">' + esc(p.error) + "</div>";
       else if (!list.length) h += '<div class="empty">' + (p.andando != null && (p.llegadas || []).length ? "Ninguno al que llegues andando." : "Sin buses próximos.") + "</div>";
       list.forEach(function(b){
@@ -977,7 +978,7 @@ footer{color:var(--tx3);font-size:11px;margin-top:8px}
         h += '<div class="row"><span class="ln"' + bg + ">" + esc(b.linea) + "</span>";
         h += '<span class="to">' + (b.hacia ? "→ " + esc(b.hacia) : "") + (b.metros ? (b.hacia ? " · " : "") + (b.metros >= 1000 ? (b.metros / 1000).toFixed(1).replace(".", ",") + " km" : b.metros + " m") : "") + "</span>";
         var src = p.programado || b.fuente === "horario" ? " sched" : p.stale || b.fuente === "sinsenal" || b.fuente === "viejo" ? " old" : " live";
-        h += '<span class="right">' + (m <= 0 && !p.programado ? '<span class="min now' + src + '">llegando</span>' : '<span class="min' + src + '"><small>pasa </small>' + clock(gotAt + m * 60000) + "</span>");
+        h += '<span class="right">' + (m <= 0 && !p.programado && b.fuente !== "horario" ? '<span class="min now' + src + '">llegando</span>' : '<span class="min' + src + '"><small>pasa </small>' + clock(gotAt + m * 60000) + "</span>");
         if (p.andando != null) h += leave(m, p.andando); else if (m > 0) h += '<span class="lv gone">en ' + m + " min</span>";
         h += "</span></div>";
       });
