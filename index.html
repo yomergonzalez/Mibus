@@ -272,7 +272,7 @@ function renderList(allStops) {
     const li = lineInfo(first.linea);
     hero = '<section class="hero"><div class="chip" style="background:' + li.c + '">' + esc(li.n) + '</div><div class="mid"><div class="lbl">Próximo bus</div>' +
       (first.left <= 1 ? '<div class="big now ' + src(first) + '">Llegando</div>' : '<div class="big ' + src(first) + '">' + first.left + '<small>min</small></div>') +
-      '<div class="stp">' + esc(stopName(first.stop)) + '</div></div><div class="at"><b class="' + src(first) + '">' + hhmm(first.at) + '</b><span>' + (first.prog ? 'horario' : first.ghost ? 'sin señal' : 'a ' + esc(fmtKm(first.dist))) + '</span></div></section>';
+      '<div class="stp">' + esc(stopName(first.stop)) + '</div></div><div class="at"><b class="' + src(first) + '">' + hhmm(first.at) + '</b><span>' + (first.prog ? 'según horario' : first.ghost ? 'sin señal' : 'a ' + esc(fmtKm(first.dist))) + '</span></div></section>';
   }
   const row = (b, cls) => {
     const li = lineInfo(b.linea);
@@ -280,7 +280,7 @@ function renderList(allStops) {
     return '<div class="row ' + cls + '"><div class="chip" style="background:' + li.c + '">' + esc(li.n) + '</div>' +
       '<div class="mid">' + (b.left <= 1 ? '<div class="min now ' + src(b) + '">Llegando</div>' : '<div class="min ' + src(b) + '">' + b.left + '<small>min</small>' + (b.fav ? '<span class="fav" aria-label="favorita">★</span>' : '') + '</div>') +
       '<div class="stp">' + esc(stopName(b.stop)) + '</div></div>' +
-      '<div class="at"><b class="' + src(b) + '">' + hhmm(b.at) + '</b><span>' + (b.prog ? 'horario' : b.ghost ? 'sin señal' : 'a ' + esc(km)) + '</span></div></div>';
+      '<div class="at"><b class="' + src(b) + '">' + hhmm(b.at) + '</b><span>' + (b.prog ? 'según horario' : b.ghost ? 'sin señal' : 'a ' + esc(km)) + '</span></div></div>';
   };
   let rows = favs.slice(1, 8).map((b) => row(b, '')).join('');
   const otherRows = others.slice(0, 6).map((b) => row(b, 'other')).join('');
