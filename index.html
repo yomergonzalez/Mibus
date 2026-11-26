@@ -115,10 +115,11 @@ main{max-width:640px;margin:0 auto;padding:10px 10px 14px;display:grid;gap:10px}
 .mid{min-width:0}
 .pf{display:grid;grid-template-columns:auto 108px minmax(0,1fr) auto;gap:8px;align-items:center;margin:8px 0}
 .pf label{font-size:14px;font-weight:700}
+.mgf{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:2px 0 4px}.mgf label{font-size:15px;font-weight:700;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.mgf select{min-height:40px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:16px Figtree,system-ui,sans-serif;padding:0 8px}
 .pf input,.pf select{min-height:40px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:16px Figtree,system-ui,sans-serif;padding:0 8px}
 .pf button{min-height:40px;border:0;border-radius:10px;background:var(--red);color:#fff;font:700 14px Figtree,system-ui,sans-serif;padding:0 12px}
 @media(max-width:380px){.pf{grid-template-columns:1fr 1fr}.pf label{grid-column:1/-1}}
-.pr .min{font-size:18px}
+.pr .min{font-size:18px}.pr .min .k{font-size:13px;font-weight:700;color:var(--mute);margin-right:5px}
 .fav{color:#e0a100;font-size:13px;margin-left:4px}
 .other .chip{opacity:.8}.other .min{font-size:18px}
 .sec{font-size:12px;font-weight:700;color:var(--mute);padding:10px 0 4px;border-top:1px solid var(--line)}
@@ -231,6 +232,11 @@ footer{color:var(--mute);font-size:13px;text-align:center;padding:0 16px 28px}
 </header>
 <main id="list"></main>
 <div class="tools">
+  <section class="card mg" id="mgc">
+    <div class="mgf"><label for="mg" id="mgl">Margen al salir</label>
+      <select id="mg"><option value="3">3 min</option><option value="5">5 min</option><option value="10">10 min</option><option value="15">15 min</option><option value="20">20 min</option></select></div>
+    <p class="sub">Ascensor, coger tus cosas y llegar antes a la parada por si el bus se adelanta. Se suma a lo que tardas andando en todos los «sal».</p>
+  </section>
   <section class="card" id="plan">
     <h2>¿Qué bus cojo?</h2>
     <div class="pf">
@@ -240,7 +246,7 @@ footer{color:var(--mute);font-size:13px;text-align:center;padding:0 16px 28px}
       <button id="pb">Calcular</button>
     </div>
     <div id="pr"></div>
-    <p class="sub">Horario programado de iTranvías; puede variar con el tráfico.</p>
+    <p class="sub">«Sal» incluye ir andando a la parada y tu margen; «llegada», lo que andas desde que bajas. Horario programado de iTranvías; puede variar con el tráfico.</p>
   </section>
   <div class="add">
     <input id="q" type="search" placeholder="Añadir parada: calle, sitio o nombre" aria-label="Buscar parada por calle, sitio o nombre" autocomplete="off">
@@ -339,7 +345,13 @@ let meta = { lines: {}, stops: {}, pos: {} };
 try { const c = JSON.parse(localStorage.getItem("mibus-meta2")); if (c && c.m && c.m.lines) meta = c.m; } catch (e) {}
 // Dónde estás (de autoTab), para el "sal en X min". Solo se usa si es reciente y precisa.
 let here = null, locDenied = false, missOpen = false;
-const MARGEN_SALIDA = 3;   // mismos minutos de margen que el Worker (ascensor, portal…)
+const MARGEN_SALIDA = 3;   // margen por defecto, el mismo que el Worker (ascensor, portal…)
+// Cada uno elige su margen (en su móvil), por trayecto y sentido: salir de casa no es salir de un piso 7.
+function margenKey() { return 'mibus-margen-' + (cfg && cfg.id) + '-' + tab; }
+function margen() {
+  try { const v = localStorage.getItem(margenKey()); if (v != null && Number(v) >= 0 && Number(v) <= 60) return Number(v); } catch (e) {}
+  return MARGEN_SALIDA;
+}
 const ANDAR_M_MIN = 80;    // 4,8 km/h
 const RODEO = 1.3;         // la calle no va en línea recta
 let manual = false, byLoc = false, hiddenAt = 0, filt = null, manualFilt = false, nearId = null;
@@ -380,7 +392,7 @@ function names(t, dir) { const a = t.origen.nombre, b = t.destino.nombre; return
 function renderTrip() {
   const none = !store.trips.length;
   $('swap').disabled = none; $('editbtn').hidden = none;
-  if (none) { $('tripname').textContent = 'Sin trayectos'; $('triphint').textContent = 'Configura uno para empezar'; $('swaplbl').textContent = 'Volver'; $('plan').hidden = true; return; }
+  if (none) { $('tripname').textContent = 'Sin trayectos'; $('triphint').textContent = 'Configura uno para empezar'; $('swaplbl').textContent = 'Volver'; $('plan').hidden = true; $('mgc').hidden = true; return; }
   const n = names(cfg);
   $('tripname').textContent = n.from + ' → ' + n.to;
   $('triphint').textContent = (tab === 'ida' ? 'Ida' : 'Vuelta') + ' · ' + (byLoc && !manual ? 'cambiado porque estás cerca de ' + n.from : 'tu último trayecto');
@@ -388,6 +400,7 @@ function renderTrip() {
   $('swap').setAttribute('aria-label', 'Cambiar a ' + n.to + ' → ' + n.from);
   // «¿Qué bus cojo?» usa el horario de tu trayecto original en el Worker: solo para ese.
   $('plan').hidden = cfg.id !== 't1';
+  $('mgc').hidden = false;
 }
 function setTrip(id, dir) {
   const t = store.trips.find((x) => x.id === id); if (!t) return;
@@ -497,7 +510,7 @@ function leaveBox(b) {
   if (b.miss) return '<div class="leave bad">' + ICON.walk + '<span><b>No llegas andando</b><small>Es el próximo, pero no da tiempo</small></span></div>';
   if (b.walk === 0) return '<div class="leave ok">' + ICON.walk + '<span><b>Ya estás en la parada</b></span></div>';
   const s = b.left - b.walk;
-  return '<div class="leave ' + (s < 5 ? 'bad' : s < 10 ? 'warn' : 'ok') + '">' + ICON.walk + '<span><b>' + (s <= 0 ? '¡Sal ya!' : 'Sal en ' + s + ' min') + '</b><small>Incluye ' + MARGEN_SALIDA + ' min de margen</small></span></div>';
+  return '<div class="leave ' + (s < 5 ? 'bad' : s < 10 ? 'warn' : 'ok') + '">' + ICON.walk + '<span><b>' + (s <= 0 ? '¡Sal ya!' : 'Sal en ' + s + ' min') + '</b><small>Incluye ' + margen() + ' min de margen</small></span></div>';
 }
 // «sal en X min» corto, en la cabecera de cada parada.
 function goShort(b) {
@@ -529,7 +542,7 @@ function renderList(stops) {
         if (t - el < -1) continue;
         // Sin GPS no se puede decir "Llegando": un bus del horario a su hora se quita.
         if ((d.prog || b.programado) && Math.round(t - el) < 1) continue;
-        all.push({ walk: w, miss: w != null && Math.round(t - el) < w - MARGEN_SALIDA, linea: l.linea, fav: fav, left: Math.max(0, Math.round(t - el)), at: d.at + t * 60000, stop: s.id, prog: !!(d.prog || b.programado), old: !d.prog && !!(d.err || d.stale || b.sinSenal), ghost: !!b.sinSenal });
+        all.push({ walk: w, miss: w != null && Math.round(t - el) < w - margen(), linea: l.linea, fav: fav, left: Math.max(0, Math.round(t - el)), at: d.at + t * 60000, stop: s.id, prog: !!(d.prog || b.programado), old: !d.prog && !!(d.err || d.stale || b.sinSenal), ghost: !!b.sinSenal });
       }
     }
   }
@@ -610,7 +623,7 @@ function walkTo(id) {
   const m = km(here.p, q) * 1000;
   if (m > 2000) return null;
   if (m < 60) return 0; // ya estás en la parada: sin margen
-  return Math.ceil(m * RODEO / ANDAR_M_MIN) + MARGEN_SALIDA;
+  return Math.ceil(m * RODEO / ANDAR_M_MIN) + margen();
 }
 function autoTab() {
   if (!navigator.geolocation) return;
@@ -898,7 +911,20 @@ $('res').onclick = (ev) => {
   render(); refresh();
   toast('Añadida: ' + stopName(id));
 };
-function planLabel() { $('pl').textContent = tab === 'ida' ? 'Llegar a las' : 'Salgo a las'; try { const v = localStorage.getItem('mibus-plan-' + tab); $('pt').value = v || (tab === 'ida' ? '10:00' : '22:00'); } catch (e) {} $('pr').innerHTML = ''; }
+function margenLabel() {
+  const v = margen(), sel = $('mg');
+  if (![...sel.options].some((o) => Number(o.value) === v)) sel.insertAdjacentHTML('beforeend', '<option value="' + v + '">' + v + ' min</option>');
+  sel.value = String(v);
+  try { $('mgl').textContent = 'Margen al salir de ' + names(cfg).from; } catch (e) { $('mgl').textContent = 'Margen al salir'; }
+}
+$('mg').onchange = () => {
+  try { localStorage.setItem(margenKey(), $('mg').value); } catch (e) {}
+  render();
+  if ($('pr').querySelector('.row')) runPlan();
+};
+function planLabel() { margenLabel(); $('pl').textContent = tab === 'ida' ? 'Llegar a las' : 'Salgo a las'; try { const v = localStorage.getItem('mibus-plan-' + tab); $('pt').value = v || (tab === 'ida' ? '10:00' : '22:00'); } catch (e) {} $('pr').innerHTML = ''; }
+const hm = (t) => { const [h, m] = String(t).split(':').map(Number); return h * 60 + m; };
+const hmTxt = (n) => { n = ((n % 1440) + 1440) % 1440; return String(Math.floor(n / 60)).padStart(2, '0') + ':' + String(n % 60).padStart(2, '0'); };
 async function runPlan() {
   if (!PROXY) { $('pr').innerHTML = '<div class="err">Hace falta el Worker para el horario.</div>'; return; }
   const v = $('pt').value; if (!v) return;
@@ -908,12 +934,16 @@ async function runPlan() {
   $('pr').innerHTML = '<div class="empty">Calculando…</div>';
   try {
     const p = await tryFetch(PROXY.replace(/\/$/, '') + '/api/plan?trip=' + tab + '&time=' + encodeURIComponent(v) + '&date=' + date, 8000);
-    const opts = (p.options || []).slice(0, 4);
+    // El Worker calcula «sal» con MARGEN_SALIDA; se corre a tu margen. Si sales a una hora, fuera las que ya no da tiempo.
+    const extra = margen() - MARGEN_SALIDA, t0 = hm(v);
+    const opts = (p.options || []).map((o) => Object.assign({}, o, { leave: hmTxt(hm(o.leave) - extra) }))
+      .filter((o) => tab === 'ida' || hm(o.leave) >= t0).slice(0, 4);
     if (!opts.length) { $('pr').innerHTML = '<div class="empty">No hay buses para esa hora.</div>'; return; }
     $('pr').innerHTML = (p.tipo ? '<div class="sub">' + esc(p.tipo) + '</div>' : '') + opts.map((o) => {
       const li = lineInfo(o.lineId);
-      return '<div class="row pr"><div class="chip" style="background:' + li.c + '">' + esc(li.n) + '</div><div class="mid"><div class="min">' + esc(o.bus) + (o.main ? '<span class="fav">★</span>' : '') + '</div>' +
-        '<div class="stp">' + esc(o.stop) + '</div></div><div class="at"><b>' + esc(o.arrive) + '</b><span>' + 'llegas' + '</span></div></div>';
+      // Lo grande es cuándo salir; debajo, cuándo pasa el bus y dónde; a la derecha, la llegada puerta a puerta.
+      return '<div class="row pr" aria-label="' + esc('Sal a las ' + o.leave + ', el ' + li.n + ' pasa a las ' + o.bus + ' por ' + o.stop + ', llegada a las ' + o.arrive) + '"><div class="chip" style="background:' + li.c + '">' + esc(li.n) + '</div><div class="mid"><div class="min"><span class="k">Sal</span>' + esc(o.leave) + (o.main ? '<span class="fav">★</span>' : '') + '</div>' +
+        '<div class="stp">Pasa ' + esc(o.bus) + ' · ' + esc(o.stop) + '</div></div><div class="at"><b>' + esc(o.arrive) + '</b><span>llegada</span></div></div>';
     }).join('');
   } catch (e) { $('pr').innerHTML = '<div class="err">No se pudo consultar el horario. Prueba otra vez.</div>'; }
 }
