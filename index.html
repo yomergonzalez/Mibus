@@ -260,6 +260,8 @@ function renderList(allStops) {
       for (const b of l.buses || []) {
         const t = mins(b.tiempo);
         if (t - el < -1) continue;
+        // Sin GPS no se puede decir "Llegando": un bus del horario a su hora se quita.
+        if ((d.prog || b.programado) && Math.round(t - el) < 1) continue;
         all.push({ linea: l.linea, fav: fav, left: Math.max(0, Math.round(t - el)), at: d.at + t * 60000, dist: metres(b.distancia), stop: s.id, prog: !!(d.prog || b.programado), old: !d.prog && !!(d.err || d.stale || b.sinSenal), ghost: !!b.sinSenal });
       }
     }
@@ -271,14 +273,14 @@ function renderList(allStops) {
   if (first) {
     const li = lineInfo(first.linea);
     hero = '<section class="hero"><div class="chip" style="background:' + li.c + '">' + esc(li.n) + '</div><div class="mid"><div class="lbl">Próximo bus</div>' +
-      (first.left <= 1 ? '<div class="big now ' + src(first) + '">Llegando</div>' : '<div class="big ' + src(first) + '">' + first.left + '<small>min</small></div>') +
+      (first.left <= 1 && !first.prog ? '<div class="big now ' + src(first) + '">Llegando</div>' : '<div class="big ' + src(first) + '">' + first.left + '<small>min</small></div>') +
       '<div class="stp">' + esc(stopName(first.stop)) + '</div></div><div class="at"><b class="' + src(first) + '">' + hhmm(first.at) + '</b><span>' + (first.prog ? 'según horario' : first.ghost ? 'sin señal' : 'a ' + esc(fmtKm(first.dist))) + '</span></div></section>';
   }
   const row = (b, cls) => {
     const li = lineInfo(b.linea);
     const km = fmtKm(b.dist);
     return '<div class="row ' + cls + '"><div class="chip" style="background:' + li.c + '">' + esc(li.n) + '</div>' +
-      '<div class="mid">' + (b.left <= 1 ? '<div class="min now ' + src(b) + '">Llegando</div>' : '<div class="min ' + src(b) + '">' + b.left + '<small>min</small>' + (b.fav ? '<span class="fav" aria-label="favorita">★</span>' : '') + '</div>') +
+      '<div class="mid">' + (b.left <= 1 && !b.prog ? '<div class="min now ' + src(b) + '">Llegando</div>' : '<div class="min ' + src(b) + '">' + b.left + '<small>min</small>' + (b.fav ? '<span class="fav" aria-label="favorita">★</span>' : '') + '</div>') +
       '<div class="stp">' + esc(stopName(b.stop)) + '</div></div>' +
       '<div class="at"><b class="' + src(b) + '">' + hhmm(b.at) + '</b><span>' + (b.prog ? 'según horario' : b.ghost ? 'sin señal' : 'a ' + esc(km)) + '</span></div></div>';
   };
