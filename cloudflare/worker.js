@@ -65,6 +65,18 @@ async function handle(req, env, ctx) {
       try { return json(await plan(trip, time, date)); } catch (e) { return json({ error: 'iTranvías no responde' }, 502); }
     }
 
+    // Buscador de destinos para «Configura tu trayecto»: /api/buscar?q=corte ingles&lat=43.36&lon=-8.41
+    if (url.pathname === '/api/buscar') {
+      const q = (url.searchParams.get('q') || '').trim();
+      if (q.length < 3 || q.length > 80) return json({ error: 'escribe entre 3 y 80 letras', resultados: [] }, 400);
+      const lat = parseFloat(url.searchParams.get('lat')), lon = parseFloat(url.searchParams.get('lon'));
+      try {
+        return json({ resultados: await buscarLugares(q, isFinite(lat) ? lat : null, isFinite(lon) ? lon : null, ctx) }, 200, 'public, max-age=86400');
+      } catch (e) {
+        return json({ error: 'el buscador no responde', resultados: [] }, 502);
+      }
+    }
+
     if (url.pathname === '/alexa' && req.method === 'POST') {
       const body = await req.clone().json().catch(() => null);
       ALEXA_TRACE = [];
@@ -2204,4 +2216,57 @@ async function logMcp(env, req, reqText, res, trace) {
       env.DB.prepare('DELETE FROM alexa_log WHERE id <= (SELECT MAX(id) - 500 FROM alexa_log)')
     ]);
   } catch (e) {}
+}
+
+
+// ---------- Buscador de destinos (Photon, OpenStreetMap) ----------
+// Photon permite buscar mientras se escribe; el servidor público es gratuito con uso razonable,
+// así que cada búsqueda se guarda una semana en la caché del Worker y el cliente espera a que
+// el usuario deje de escribir. Solo A Coruña y alrededores (donde llega el bus urbano).
+const PHOTON = 'https://photon.komoot.io/api/';
+const CORUNA_BBOX = [-8.48, 43.30, -8.35, 43.40]; // oeste, sur, este, norte
+
+async function buscarLugares(q, lat, lon, ctx) {
+  const nq = norm(q);
+  const sesgo = lat != null && lon != null ? '&lat=' + lat.toFixed(2) + '&lon=' + lon.toFixed(2) : '';
+  const cache = caches.default;
+  const key = new Request('https://mibus.cache/buscar/v1?q=' + encodeURIComponent(nq) + sesgo);
+  const hit = await cache.match(key);
+  if (hit) return hit.json();
+  const u = PHOTON + '?q=' + encodeURIComponent(q) + '&limit=10&bbox=' + CORUNA_BBOX.join(',') + sesgo;
+  const r = await fetch(u, { headers: { 'Accept': 'application/json', 'User-Agent': 'MiBus-Coruna/1.0 (+https://yomergonzalez.github.io/Mibus/)' } });
+  if (!r.ok) throw new Error('Photon ' + r.status);
+  const out = photonResultados(await r.json());
+  const put = cache.put(key, new Response(JSON.stringify(out), { headers: { 'cache-control': 'public, max-age=604800' } }));
+  if (ctx && ctx.waitUntil) ctx.waitUntil(put); else await put;
+  return out;
+}
+
+// GeoJSON de Photon → [{ nombre, detalle, tipo: 'sitio'|'direccion'|'calle', pos: [lat, lon] }]
+export function photonResultados(geo, max = 6) {
+  const out = [], vistos = new Set();
+  for (const f of (geo && geo.features) || []) {
+    const p = f.properties || {};
+    const c = f.geometry && f.geometry.coordinates;
+    if (!c || c.length < 2) continue;
+    const [lon, lat] = c;
+    if (lon < CORUNA_BBOX[0] || lon > CORUNA_BBOX[2] || lat < CORUNA_BBOX[1] || lat > CORUNA_BBOX[3]) continue;
+    const calleNum = p.street ? p.street + (p.housenumber ? ', ' + p.housenumber : '') : '';
+    const zona = p.district || p.locality || (p.city && p.city !== 'A Coruña' ? p.city : '') || '';
+    let tipo, nombre, detalle;
+    if (p.osm_key === 'highway' || p.type === 'street') {
+      tipo = 'calle'; nombre = p.name; detalle = zona || 'Calle';
+    } else if (p.name) {
+      tipo = 'sitio'; nombre = p.name; detalle = calleNum || zona;
+    } else if (calleNum) {
+      tipo = 'direccion'; nombre = calleNum; detalle = zona || 'Dirección';
+    } else continue;
+    if (!nombre) continue;
+    const k = norm(nombre) + '|' + norm(detalle);
+    if (vistos.has(k)) continue;
+    vistos.add(k);
+    out.push({ nombre, detalle: detalle || '', tipo, pos: [Math.round(lat * 1e6) / 1e6, Math.round(lon * 1e6) / 1e6] });
+    if (out.length >= max) break;
+  }
+  return out;
 }
