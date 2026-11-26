@@ -30,9 +30,15 @@ h1{font-size:22px;line-height:1.05;margin:0;font-weight:800}
 .pane{position:relative;background:var(--card);border-radius:22px 22px 0 0;padding:10px 16px max(20px,env(safe-area-inset-bottom));width:100%;max-width:640px;margin:0 auto;display:grid;gap:6px;max-height:85vh;overflow:auto}
 .grab{width:40px;height:5px;border-radius:3px;background:var(--line);justify-self:center;margin-bottom:4px}
 .pane h2{font-size:20px;margin:0 4px 4px}
-.topt{display:flex;align-items:center;gap:10px;width:100%;min-height:58px;padding:8px 12px;border-radius:14px;border:2px solid var(--line);background:var(--card);color:var(--ink);text-align:left;font:inherit}
-.topt[aria-pressed=true]{border-color:var(--red)}
-.topt span{flex:1;min-width:0}.topt b{display:block;font-size:16px}.topt small{display:block;font-size:12px;color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tcard{border:1.5px solid var(--line);border-radius:16px;overflow:hidden}
+.tcard>h3{margin:0;padding:10px 14px 8px;font-size:17px;font-weight:800;display:flex;align-items:baseline;gap:8px}
+.tcard>h3 small{font-size:13px;font-weight:500;color:var(--mute)}
+.topt{display:flex;align-items:center;gap:10px;width:100%;min-height:58px;padding:8px 12px;border:0;border-top:1px solid var(--line);background:var(--card);color:var(--ink);text-align:left;font:inherit;box-shadow:inset 4px 0 0 transparent}
+.topt[aria-pressed=true]{background:var(--soft);box-shadow:inset 4px 0 0 var(--red)}
+.topt>span:not(.dir){flex:1;min-width:0}.topt b{display:block;font-size:15px}.topt small{display:block;font-size:12px;color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dir{flex:none;width:72px;display:flex;align-items:center;gap:4px;justify-content:center;height:28px;border-radius:8px;font-size:12px;font-weight:800;letter-spacing:.04em}
+.dir.ida{background:light-dark(#111114,#f3f3f5);color:light-dark(#fff,#111114)}
+.dir.vuelta{background:transparent;color:var(--ink);border:1.5px solid currentColor}
 .act{min-height:48px;border:0;background:transparent;color:var(--ink);font:700 16px Figtree,system-ui,sans-serif;text-align:left;padding:0 12px;border-radius:12px}
 .act.red{color:var(--red);font-weight:800}.act.danger{color:var(--red);font-weight:600;font-size:14px}
 .acts{display:grid;border-top:1px solid var(--line);margin-top:6px;padding-top:6px}
@@ -127,6 +133,10 @@ body.editing .edit{display:flex}
 .tg{border:1.5px solid var(--line);background:transparent;color:var(--ink);border-radius:999px;min-height:40px;padding:0 14px;font:700 14px Figtree,system-ui,sans-serif}
 .tg[aria-pressed=true]{background:var(--ink);color:var(--card);border-color:var(--ink)}
 .tg.rm{color:var(--red);border-color:var(--red);margin-left:auto}
+.tg.fv{display:inline-flex;align-items:center;gap:6px;padding:0 12px}
+.tg.fv .st{color:light-dark(#b9b9c0,#55555e);font-size:15px}
+.tg.fv[aria-pressed=true]{background:light-dark(#fff6d6,#3a2f08);color:var(--ink);border-color:#e0a100}
+.tg.fv[aria-pressed=true] .st{color:#e0a100}
 .tools{max-width:640px;margin:0 auto;padding:0 10px 20px;display:grid;gap:10px}
 .tools>button{min-height:42px;border-radius:14px;border:1.5px solid var(--line);background:var(--card);color:var(--ink);font:700 16px Figtree,system-ui,sans-serif}
 .add{display:none;gap:8px}
@@ -266,6 +276,8 @@ let manual = false, byLoc = false, hiddenAt = 0, filt = null, manualFilt = false
 // cfg es el trayecto abierto (sus ida/vuelta son las listas de paradas de siempre) y tab el sentido.
 const STORE_KEY = 'mibus-trips-v1';
 const CERCA_DESTINO_KM = 0.3;
+// Sin trayectos (los borraste todos): un trayecto vacío para que nada se rompa, y el asistente.
+const EMPTY = { id: '', origen: { nombre: 'Casa', pos: null }, destino: { nombre: 'Destino', pos: null }, ida: [], vuelta: [] };
 let store = loadStore();
 let cfg = curTrip();
 let tab = store.dir || (new Date().getHours() < 15 ? 'ida' : 'vuelta');
@@ -284,20 +296,23 @@ function load() {
   return JSON.parse(JSON.stringify(DEF));
 }
 function loadStore() {
-  try { const s = JSON.parse(localStorage.getItem(STORE_KEY)); if (s && s.trips && s.trips.length) return s; } catch (e) {}
+  try { const s = JSON.parse(localStorage.getItem(STORE_KEY)); if (s && Array.isArray(s.trips)) return s; } catch (e) {}
   // Primera vez con trayectos: lo que tenías (o las paradas por defecto) pasa a ser «Casa → Trabajo».
   const old = load();
   return { trips: [{ id: 't1', origen: { nombre: 'Casa', pos: null }, destino: { nombre: 'Trabajo', pos: null }, ida: old.ida, vuelta: old.vuelta }], cur: 't1', dir: null };
 }
-function curTrip() { return store.trips.find((t) => t.id === store.cur) || store.trips[0]; }
+function curTrip() { return store.trips.find((t) => t.id === store.cur) || store.trips[0] || EMPTY; }
 function save() { store.cur = cfg.id; store.dir = tab; try { localStorage.setItem(STORE_KEY, JSON.stringify(store)); } catch (e) {} }
 // Sin coordenadas guardadas (trayectos migrados), el centro de sus paradas.
 function endPos(t, which) { const e = t[which]; return (e && e.pos) || centre(which === 'origen' ? t.ida : t.vuelta); }
 function names(t, dir) { const a = t.origen.nombre, b = t.destino.nombre; return (dir || tab) === 'ida' ? { from: a, to: b } : { from: b, to: a }; }
 function renderTrip() {
+  const none = !store.trips.length;
+  $('swap').disabled = none; $('editbtn').hidden = none;
+  if (none) { $('tripname').textContent = 'Sin trayectos'; $('triphint').textContent = 'Configura uno para empezar'; $('swaplbl').textContent = 'Volver'; $('plan').hidden = true; return; }
   const n = names(cfg);
   $('tripname').textContent = n.from + ' → ' + n.to;
-  $('triphint').textContent = byLoc && !manual ? 'Cambiado porque estás cerca de ' + n.from : 'Tu último trayecto';
+  $('triphint').textContent = (tab === 'ida' ? 'Ida' : 'Vuelta') + ' · ' + (byLoc && !manual ? 'cambiado porque estás cerca de ' + n.from : 'tu último trayecto');
   $('swaplbl').textContent = tab === 'ida' ? 'Volver' : 'Ir';
   $('swap').setAttribute('aria-label', 'Cambiar a ' + n.to + ' → ' + n.from);
   // «¿Qué bus cojo?» usa el horario de tu trayecto original en el Worker: solo para ese.
@@ -320,6 +335,7 @@ function lineInfo(id) {
 function render() {
   if (render.tab !== tab + cfg.id) { render.tab = tab + cfg.id; planLabel(); }
   renderTrip();
+  if (!store.trips.length) { $('list').innerHTML = '<section class="card" style="padding-bottom:14px"><h2>No tienes trayectos</h2><p class="sub">Dinos desde dónde sales y a dónde vas, y elegimos las paradas por ti.</p><button class="bigbtn" data-a="wizard">Configura tu trayecto</button></section>'; return; }
   const stops = cfg[tab];
   if (!stops.length) { $('list').innerHTML = '<div class="card"><p class="sub">No hay paradas. Pulsa «Editar paradas» para añadir una.</p></div>'; return; }
   if (!document.body.classList.contains('editing')) { renderList(stops); return; }
@@ -347,7 +363,9 @@ function render() {
     const present = new Set((d && d.lineas || []).map((l) => l.linea));
     (s.lines || []).forEach((x) => present.add(x));
     const toggles = [...present].sort((a, b) => a - b).map((lid) =>
-      '<button class="tg" data-i="' + i + '" data-l="' + lid + '" aria-pressed="' + (!s.lines || s.lines.indexOf(lid) >= 0) + '">★ ' + esc(lineInfo(lid).n) + '</button>').join('');
+      '<button class="tg fv" data-i="' + i + '" data-l="' + lid + '" aria-pressed="' + (!s.lines || s.lines.indexOf(lid) >= 0) + '" aria-label="Línea ' + esc(lineInfo(lid).n) + ' favorita">' +
+      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="' + lineInfo(lid).c + '" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="3" width="14" height="15" rx="3"/><path d="M5 11h14M8 21l1-3M16 21l-1-3"/><circle cx="8.5" cy="14.5" r=".6" fill="' + lineInfo(lid).c + '"/><circle cx="15.5" cy="14.5" r=".6" fill="' + lineInfo(lid).c + '"/></svg>' +
+      esc(lineInfo(lid).n) + '<span class="st" aria-hidden="true">★</span></button>').join('');
     return '<section class="card"><h2>' + esc(stopName(s.id)) + '</h2><div class="sub">Parada ' + esc(s.id) +
       (s.lines ? ' · favoritas ★ ' + s.lines.map((x) => esc(lineInfo(x).n)).join(', ') : ' · todas favoritas') + ' · toca una línea para marcarla</div>' +
       rows + '<div class="edit">' + toggles + '<button class="tg rm" data-rm="' + i + '">Quitar</button></div></section>';
@@ -500,13 +518,17 @@ let delArmed = false;
 function openSheet() {
   delArmed = false;
   $('deltrip').textContent = 'Borrar este trayecto';
-  $('deltrip').hidden = store.trips.length < 2;
-  $('triplist').innerHTML = store.trips.map((t) => ['ida', 'vuelta'].map((d) => {
+  $('deltrip').hidden = !store.trips.length; $('edittrip').hidden = !store.trips.length;
+  // Una tarjeta por destino, con la ida y la vuelta dentro y etiquetadas.
+  const ARROW = { ida: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
+    vuelta: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>' };
+  $('triplist').innerHTML = store.trips.map((t) => '<div class="tcard"><h3>' + esc(t.destino.nombre) + '<small>desde ' + esc(t.origen.nombre) + '</small></h3>' + ['ida', 'vuelta'].map((d) => {
     const n = names(t, d), on = t === cfg && d === tab;
     const sub = t[d].map((s) => shortName(s.id) + (s.lines ? ' (' + s.lines.map((l) => lineInfo(l).n).join(', ') + ')' : '')).join(' · ');
-    return '<button class="topt" data-trip="' + esc(t.id) + '" data-dir="' + d + '" aria-pressed="' + on + '"><span><b>' + esc(n.from) + ' → ' + esc(n.to) + '</b><small>' + esc(sub || 'Sin paradas') + '</small></span>' +
-      (on ? '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#c8102e" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"/></svg>' : '') + '</button>';
-  }).join('')).join('');
+    return '<button class="topt" data-trip="' + esc(t.id) + '" data-dir="' + d + '" aria-pressed="' + on + '"><span class="dir ' + d + '">' + (d === 'ida' ? 'IDA ' + ARROW.ida : ARROW.vuelta + ' VUELTA') + '</span>' +
+      '<span><b>' + esc(n.from) + ' → ' + esc(n.to) + '</b><small>' + esc(sub || 'Sin paradas · Editar paradas para añadirlas') + '</small></span>' +
+      (on ? '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#c8102e" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-label="Abierto"><path d="M5 12.5l4.5 4.5L19 7"/></svg>' : '') + '</button>';
+  }).join('') + '</div>').join('');
   $('sheet').hidden = false;
   const first = $('triplist').querySelector('[aria-pressed=true]'); if (first) first.focus();
 }
@@ -521,11 +543,12 @@ $('edittrip').onclick = () => {
   $('list').scrollIntoView({ behavior: 'smooth' });
 };
 $('deltrip').onclick = () => {
-  if (store.trips.length < 2) return;
+  if (!store.trips.length) return;
   if (!delArmed) { delArmed = true; $('deltrip').textContent = 'Toca otra vez para borrar ' + names(cfg, 'ida').from + ' → ' + names(cfg, 'ida').to; return; }
   store.trips = store.trips.filter((t) => t !== cfg);
   $('sheet').hidden = true;
-  setTrip(store.trips[0].id, 'ida');
+  if (store.trips.length) { setTrip(store.trips[0].id, 'ida'); return; }
+  cfg = EMPTY; tab = 'ida'; save(); render(); openWizard({});
 };
 $('refresh').onclick = refresh;
 $('editbtn').onclick = () => { const on = document.body.classList.toggle('editing'); $('editbtn').textContent = on ? 'Listo' : 'Editar paradas'; render(); };
@@ -533,6 +556,7 @@ $('reset').onclick = () => openWizard({ trip: cfg });
 $('newtrip').onclick = () => { $('sheet').hidden = true; openWizard({}); };
 $('list').onclick = (e) => {
   const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.a === 'wizard') { openWizard({}); return; }
   if (b.dataset.f != null) { filt = b.dataset.f ? Number(b.dataset.f) : null; manualFilt = true; render(); return; }
   if (b.dataset.rm != null) { cfg[tab].splice(Number(b.dataset.rm), 1); save(); render(); return; }
   if (b.dataset.l) {
@@ -596,10 +620,9 @@ const ICON_PIN = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" st
 const ICON_CHECK = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"/></svg>';
 const TIPO = { popular: 'Sitio', sitio: 'Sitio', direccion: 'Dirección', calle: 'Calle', parada: 'Parada' };
 const chipsOf = (ids) => '<span class="lc">' + ids.map((l) => { const m = W && W.lib && W.lib.meta.lines[l]; const li = m ? { n: m.n, c: /^#[0-9a-f]{3,8}$/i.test(m.c || '') ? m.c : lineInfo(Number(l)).c } : lineInfo(Number(l)); return '<span class="chip" style="background:' + li.c + '">' + esc(li.n) + '</span>'; }).join('') + '</span>';
-const okey = (o) => o.linea + '|' + o.sube.id;
 
 function openWizard(o) {
-  W = { step: 1, mode: 'loc', origen: null, destino: null, q: '', res: [], locating: false, err: '', opts: null, vuelta: [], sel: new Set(), nombre: '', trip: o.trip || null, lib: null };
+  W = { step: 1, mode: 'loc', origen: null, destino: null, q: '', res: [], locating: false, err: '', opts: null, ida: null, vta: null, nombre: '', trip: o.trip || null, lib: null };
   if (W.trip) {
     W.origen = { nombre: W.trip.origen.nombre, pos: endPos(W.trip, 'origen') };
     W.destino = { nombre: W.trip.destino.nombre, pos: endPos(W.trip, 'destino') };
@@ -627,39 +650,43 @@ function wLocate() {
   }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
 }
 
+// Paradas para cada sentido: una tarjeta por parada con todas las líneas que te llevan.
+// Se marcan solas las más rápidas (hasta 5 min peor que la mejor) que aporten alguna línea nueva.
+function stopGroups(list, prev) {
+  const g = W.lib.P.porParadaDeSubida(list).map((x) => {
+    const best = x.opciones.reduce((a, o) => (o.total < a.total ? o : a));
+    return { id: x.parada.id, nombre: x.parada.nombre, lineas: x.opciones.map((o) => o.linea), best };
+  }).sort((a, b) => a.best.total - b.best.total);
+  const out = g.filter((x) => x.best.total <= (g[0] ? g[0].best.total : 0) + 10).slice(0, 6);
+  const sel = new Set();
+  if (prev && prev.length) { for (const x of out) if (prev.some((s) => String(s.id) === x.id)) sel.add(x.id); }
+  if (!sel.size && out.length) {
+    const seen = new Set(), top = out[0].best.total;
+    for (const x of out) {
+      if (sel.size >= 4 || x.best.total > top + 5) break;
+      if (x.lineas.some((l) => !seen.has(l))) { sel.add(x.id); x.lineas.forEach((l) => seen.add(l)); }
+    }
+  }
+  return { list: out, sel };
+}
 function wCompute() {
   const P = W.lib.P, r = { radioOrigenM: 600, radioDestinoM: 400 };
-  W.opts = P.mejoresPorLinea(P.opcionesDirectas(W.origen.pos, W.destino.pos, r));
-  W.vuelta = P.mejoresPorLinea(P.opcionesDirectas(W.destino.pos, W.origen.pos, r));
-  W.sel = new Set();
-  if (W.trip) for (const o of W.opts) { const s = W.trip.ida.find((x) => String(x.id) === o.sube.id); if (s && (!s.lines || s.lines.indexOf(Number(o.linea)) >= 0)) W.sel.add(okey(o)); }
-  if (!W.sel.size && W.opts.length) { const best = W.opts[0].total; W.opts.filter((o) => o.total <= best + 5).slice(0, 3).forEach((o) => W.sel.add(okey(o))); }
+  W.ida = stopGroups(P.opcionesDirectas(W.origen.pos, W.destino.pos, r), W.trip && W.trip.ida);
+  W.vta = stopGroups(P.opcionesDirectas(W.destino.pos, W.origen.pos, r), W.trip && W.trip.vuelta);
+  W.opts = W.ida.list;
 }
-function wVuelta() {
-  const lines = new Set(W.opts.filter((o) => W.sel.has(okey(o))).map((o) => o.linea));
-  const v = W.vuelta.filter((o) => lines.has(o.linea));
-  return v.length ? v : W.vuelta.slice(0, 2);
-}
-function groupStops(list) {
-  const out = [];
-  for (const o of list) {
-    let s = out.find((x) => x.id === Number(o.sube.id));
-    if (!s) { s = { id: Number(o.sube.id), lines: [] }; out.push(s); }
-    if (s.lines.indexOf(Number(o.linea)) < 0) s.lines.push(Number(o.linea));
-  }
-  return out;
-}
+function chosenStops(d) { return d.list.filter((x) => d.sel.has(x.id)).map((x) => ({ id: Number(x.id), lines: x.lineas.map(Number) })); }
 function wSave() {
-  const chosen = W.opts.filter((o) => W.sel.has(okey(o)));
-  if (!chosen.length) return;
+  const ida = chosenStops(W.ida);
+  if (!ida.length) return;
   const nombre = (W.nombre || W.destino.nombre || '').trim().slice(0, 40) || 'Destino';
-  const d = { origen: { nombre: (W.origen.nombre || 'Casa'), pos: W.origen.pos }, destino: { nombre, pos: W.destino.pos }, ida: groupStops(chosen), vuelta: groupStops(wVuelta()) };
+  const d = { origen: { nombre: (W.origen.nombre || 'Casa'), pos: W.origen.pos }, destino: { nombre, pos: W.destino.pos }, ida, vuelta: chosenStops(W.vta) };
   let t = W.trip;
   if (t) Object.assign(t, d); else { t = Object.assign({ id: 't' + Date.now().toString(36) }, d); store.trips.push(t); }
   closeWizard();
   if (document.body.classList.contains('editing')) $('editbtn').click();
   setTrip(t.id, 'ida');
-  toast('Trayecto guardado. La vuelta también está lista.');
+  toast(d.vuelta.length ? 'Trayecto guardado, con la ida y la vuelta.' : 'Trayecto guardado. No hay bus directo de vuelta.');
 }
 
 function wSearchHTML(forOrigen) {
@@ -728,20 +755,22 @@ function wRender() {
     if (!W.locating) h += '<button class="ghost" data-a="type">Prefiero escribir mi calle</button>';
   } else if (W.step === 2) h = wSearchHTML(false);
   else {
-    h = '<div><h2 id="wt">Así llegas a ' + esc(W.destino.nombre) + '</h2><p class="lead">Hemos marcado las paradas con bus directo. Toca una para quitarla o añadirla.</p></div>';
+    h = '<div><h2 id="wt">Así llegas a ' + esc(W.destino.nombre) + '</h2><p class="lead">Hemos marcado las paradas más rápidas con bus directo, para ir y para volver. Toca una para quitarla o añadirla.</p></div>';
     if (!W.opts) h += '<p class="note">' + esc(W.err || 'Calculando…') + '</p>';
     else if (!W.opts.length) h += '<div class="wcard"><b>No hay ningún bus directo hasta aquí</b><p class="note">Este viaje necesita transbordo. Lo añadiremos pronto. Mientras, prueba con un destino cercano.</p></div><button class="ghost" data-a="dest">Elegir otro destino</button>';
     else {
-      h += '<div class="opts">' + W.opts.map((o, i) => {
-        const on = W.sel.has(okey(o));
-        return '<button class="opt" data-o="' + i + '" aria-pressed="' + on + '"><span class="box">' + (on ? ICON_CHECK : '') + '</span><span>' +
-          '<span class="h">' + chipsOf([o.linea]) + (i === 0 ? '<span class="best">Más rápido</span>' : '') + '<em>' + o.total + ' min</em></span>' +
-          '<b>' + esc(o.sube.nombre) + '</b><small>' + o.minAndandoIni + ' min a pie · ' + o.minBus + ' en bus · bajas en ' + esc(o.baja.nombre) + '</small></span></button>';
-      }).join('') + '</div>';
-      const v = wVuelta(), n = W.sel.size;
-      h += '<div class="wcard"><div><b>La vuelta se crea sola</b><p class="note">' + (v.length ? v.map((o) => esc(o.nombreLinea) + ' desde ' + esc(o.sube.nombre)).join(' · ') : 'No hay bus directo de vuelta; la vuelta quedará vacía.') + '</p></div>' +
-        '<div class="wnm"><label for="wname">Llamar a este destino</label><input id="wname" maxlength="40" value="' + esc(W.nombre || W.destino.nombre) + '"></div></div>' +
-        '<button class="bigbtn" data-a="save"' + (n ? '' : ' disabled') + '>Guardar trayecto' + (n ? ' (' + n + (n === 1 ? ' línea' : ' líneas') + ')' : '') + '</button>';
+      const card = (dir, x) => {
+        const on = W[dir].sel.has(x.id), o = x.best;
+        return '<button class="opt" data-g="' + dir + '|' + esc(x.id) + '" aria-pressed="' + on + '"><span class="box">' + (on ? ICON_CHECK : '') + '</span><span>' +
+          '<span class="h">' + chipsOf(x.lineas) + (x === W[dir].list[0] ? '<span class="best">Más rápido</span>' : '') + '<em>' + o.total + ' min</em></span>' +
+          '<b>' + esc(x.nombre) + '</b><small>' + o.minAndandoIni + ' min a pie · ' + o.minBus + ' en bus · bajas en ' + esc(o.baja.nombre) + '</small></span></button>';
+      };
+      const n = W.ida.sel.size;
+      h += '<div class="lab">Para ir · ' + esc(W.origen.nombre || 'Casa') + ' → ' + esc(W.destino.nombre) + '</div><div class="opts">' + W.ida.list.map((x) => card('ida', x)).join('') + '</div>';
+      h += '<div class="lab">Para volver · ' + esc(W.destino.nombre) + ' → ' + esc(W.origen.nombre || 'Casa') + '</div>' +
+        (W.vta.list.length ? '<div class="opts">' + W.vta.list.map((x) => card('vta', x)).join('') + '</div>' : '<p class="note">No hay bus directo de vuelta; la vuelta quedará vacía.</p>');
+      h += '<div class="wcard"><div class="wnm" style="border:0;padding:0"><label for="wname">Llamar a este destino</label><input id="wname" maxlength="40" value="' + esc(W.nombre || W.destino.nombre) + '"></div></div>' +
+        '<button class="bigbtn" data-a="save"' + (n ? '' : ' disabled') + '>' + (n ? 'Guardar trayecto' : 'Marca al menos una parada para ir') + '</button>';
     }
   }
   $('wb').innerHTML = h;
@@ -761,10 +790,13 @@ $('wb').onclick = (e) => {
     const r = W.res[Number(b.dataset.k)]; if (!r) return;
     if (W.step === 1) { W.origen = { nombre: 'Casa', pos: r.pos, label: r.nombre }; W.mode = 'loc'; W.q = ''; wRender(); }
     else { W.destino = { nombre: r.nombre, pos: r.pos }; W.nombre = r.nombre; W.step = 3; W.opts = null; if (W.lib) wCompute(); wRender(); }
-  } else if (b.dataset.o != null) {
-    const o = W.opts[Number(b.dataset.o)], k = okey(o);
-    if (W.sel.has(k)) W.sel.delete(k); else W.sel.add(k);
+  } else if (b.dataset.g) {
+    const [dir, id] = b.dataset.g.split('|'), sel = W[dir].sel;
+    if (sel.has(id)) sel.delete(id); else sel.add(id);
+    const y = window.scrollY, t = $('wiz').scrollTop;
     wRender();
+    $('wiz').scrollTop = t; window.scrollTo(0, y);
+    const again = document.querySelector('[data-g="' + dir + '|' + id + '"]'); if (again) again.focus({ preventScroll: true });
   }
 };
 $('wback').onclick = () => {
@@ -782,6 +814,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 render();
+if (!store.trips.length) openWizard({});
 autoTab();
 refresh().then(() => getMeta().then((m) => { meta = m || meta; render(); }).catch(() => {}));
 setInterval(refresh, 30000);
