@@ -178,6 +178,18 @@ body.editing .edit{display:flex}
 .tg.fv .st{color:light-dark(#b9b9c0,#55555e);font-size:15px}
 .tg.fv[aria-pressed=true]{background:light-dark(#fff6d6,#3a2f08);color:var(--ink);border-color:#e0a100}
 .tg.fv[aria-pressed=true] .st{color:#e0a100}
+.ed{padding-bottom:6px}.ed .lab{margin:10px 0 2px}.ed .note{padding:8px 0}
+.sw{display:flex;align-items:center;gap:12px;width:100%;min-height:52px;padding:6px 0;border:0;border-top:1px solid var(--line);background:none;color:var(--ink);font:600 15px Figtree,system-ui,sans-serif;text-align:left;cursor:pointer}
+.sw .chip{flex:none}.sw .why{flex:1;color:var(--mute);font-weight:600;font-size:14px}
+.sw .knob{flex:none;width:46px;height:28px;border-radius:14px;background:var(--line);position:relative;transition:background .15s}
+.sw .knob::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:left .15s}
+.sw[aria-checked=true] .knob{background:#1a9f55}.sw[aria-checked=true] .knob::after{left:21px}
+.sw[aria-checked=false] .chip{opacity:.45}
+.nogo{border-top:1px solid var(--line);margin-top:4px}
+.nogo summary{list-style:none;display:flex;align-items:center;gap:6px;min-height:44px;color:var(--mute);font-size:14px;font-weight:600;cursor:pointer}
+.nogo summary::-webkit-details-marker{display:none}.nogo[open] .chev{transform:rotate(90deg)}
+.edfoot{display:flex;justify-content:flex-end;border-top:1px solid var(--line);margin-top:4px}
+.rmlink{display:inline-flex;align-items:center;gap:6px;min-height:44px;border:0;background:none;color:var(--red);font:700 14px Figtree,system-ui,sans-serif;padding:0 2px;cursor:pointer}
 .tools{max-width:640px;margin:0 auto;padding:0 10px 20px;display:grid;gap:10px}
 .tools>button{min-height:42px;border-radius:14px;border:1.5px solid var(--line);background:var(--card);color:var(--ink);font:700 16px Figtree,system-ui,sans-serif}
 .add{display:none;gap:8px}
@@ -383,38 +395,63 @@ function render() {
   if (!stops.length) { $('list').innerHTML = '<div class="card"><p class="sub">' + (document.body.classList.contains('editing') ? 'No hay paradas. Añade una abajo.' : 'No hay paradas. Pulsa «Editar paradas» para añadir una.') + '</p></div>'; if (document.body.classList.contains('editing') && AD.key !== tab + cfg.id) renderAdd(); return; }
   if (!document.body.classList.contains('editing')) { renderList(stops); return; }
   if (AD.key !== tab + cfg.id + stops.map((s) => s.id).join(',')) renderAdd();
+  renderEdit(stops);
+}
+
+// ---------- Editar paradas: qué líneas usas en cada una ----------
+// La app separa las líneas que te llevan al destino del trayecto (bus directo, según el GTFS) de las que no.
+// Interruptor = la línea sale en tu lista. Sin llegadas aquí: solo la configuración.
+let LIB = null;
+const edOpen = new Set(); // paradas con «no van a…» desplegado
+function stopLines(s) {
+  const set = new Set();
+  if (LIB) LIB.P.lineasDe(String(s.id)).forEach((l) => set.add(Number(l)));
+  ((data[s.id] && data[s.id].lineas) || []).forEach((l) => set.add(Number(l.linea)));
+  (s.lines || []).forEach((l) => set.add(Number(l)));
+  return [...set].sort((a, b) => a - b);
+}
+// Líneas de la parada `id` que van directas al final del trayecto: línea → minutos en bus.
+function directFrom(id) {
+  const e = tripEnds(), pos = LIB && LIB.meta.pos[id], out = {};
+  if (!pos || !e.to) return null;
+  for (const o of LIB.P.opcionesDirectas(pos, e.to, { radioOrigenM: 1, radioDestinoM: 400, inclusoSiAndarEsMejor: true })) {
+    if (String(o.sube.id) !== String(id)) continue;
+    const l = Number(o.linea);
+    if (out[l] == null || o.minBus < out[l]) out[l] = o.minBus;
+  }
+  return out;
+}
+function renderEdit(stops) {
+  if (!LIB) ensureLibs().then(() => { if (document.body.classList.contains('editing')) render(); }).catch(() => {});
+  const dest = tripEnds().dest || 'tu destino';
   $('list').innerHTML = stops.map((s, i) => {
-    const d = data[s.id];
-    let rows = '';
-    if (!d) rows = '<div class="empty">Consultando…</div>';
+    const all = stopLines(s), go = directFrom(s.id);
+    // «Todas» (lines: null) pasa a ser solo las que te llevan, que es lo que quieres casi siempre.
+    if (!s.lines && go && Object.keys(go).length) { s.lines = Object.keys(go).map(Number); save(); }
+    const on = (l) => !s.lines || s.lines.indexOf(l) >= 0;
+    const row = (l, txt) => {
+      const li = lineInfo(l);
+      return '<button class="sw" role="switch" data-i="' + i + '" data-l="' + l + '" aria-checked="' + on(l) + '" aria-label="Línea ' + esc(li.n) + (txt ? ', ' + esc(txt) : '') + '">' +
+        '<span class="chip" style="background:' + li.c + '">' + esc(li.n) + '</span><span class="why">' + esc(txt) + '</span><span class="knob" aria-hidden="true"></span></button>';
+    };
+    let body;
+    if (!all.length) body = '<p class="note">' + (data[s.id] ? 'No sabemos qué líneas paran aquí.' : 'Consultando…') + '</p>';
+    else if (!go) body = '<div class="lab">Líneas</div>' + all.map((l) => row(l, '')).join(''); // sin GTFS o sin destino: sin separar
     else {
-      const elapsed = (Date.now() - d.at) / 60000;
-      const buses = [];
-      for (const l of d.lineas || []) {
-        if (s.lines && s.lines.indexOf(l.linea) < 0) continue;
-        for (const b of l.buses || []) { const t = mins(b.tiempo); if (t - elapsed >= -1) buses.push({ linea: l.linea, t: t, dist: metres(b.distancia) }); }
+      const yes = all.filter((l) => go[l] != null), no = all.filter((l) => go[l] == null);
+      body = '<div class="lab">Te llevan a ' + esc(dest) + '</div>' +
+        (yes.length ? yes.map((l) => row(l, go[l] + ' min en bus')).join('') : '<p class="note">Ninguna va directa a ' + esc(dest) + '.</p>');
+      if (no.length) {
+        const open = !yes.length || edOpen.has(s.id) || no.some(on);
+        body += '<details class="nogo" data-s="' + s.id + '"' + (open ? ' open' : '') + '><summary>' + no.length + (no.length > 1 ? ' líneas no van' : ' línea no va') + ' a ' + esc(dest) + ICON.chev + '</summary>' +
+          no.map((l) => row(l, '')).join('') + '</details>';
       }
-      buses.sort((a, b) => a.t - b.t);
-      rows = buses.slice(0, 4).map((b) => {
-        const li = lineInfo(b.linea);
-        const left = Math.max(0, Math.round(b.t - elapsed));
-        return '<div class="row"><div class="chip" style="background:' + li.c + '">' + esc(li.n) + '</div>' +
-          (left <= 1 ? '<div class="min now">Llegando</div>' : '<div class="min">' + left + '<small>min</small></div>') +
-          '<div class="at"><b>' + hhmm(d.at + b.t * 60000) + '</b></div></div>';
-      }).join('') || '<div class="empty">Sin buses próximos ahora mismo.</div>';
-      if (d.err && !(d.lineas || []).length) rows = '<div class="err">No se pudo conectar con iTranvías ahora mismo. Pulsa Actualizar.</div>'; else if (d.err) rows = '<div class="err">Sin conexión; mostrando el último dato.</div>' + rows;
     }
-    const present = new Set((d && d.lineas || []).map((l) => l.linea));
-    (s.lines || []).forEach((x) => present.add(x));
-    const toggles = [...present].sort((a, b) => a - b).map((lid) =>
-      '<button class="tg fv" data-i="' + i + '" data-l="' + lid + '" aria-pressed="' + (!s.lines || s.lines.indexOf(lid) >= 0) + '" aria-label="Línea ' + esc(lineInfo(lid).n) + ' favorita">' +
-      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="' + lineInfo(lid).c + '" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="3" width="14" height="15" rx="3"/><path d="M5 11h14M8 21l1-3M16 21l-1-3"/><circle cx="8.5" cy="14.5" r=".6" fill="' + lineInfo(lid).c + '"/><circle cx="15.5" cy="14.5" r=".6" fill="' + lineInfo(lid).c + '"/></svg>' +
-      esc(lineInfo(lid).n) + '<span class="st" aria-hidden="true">★</span></button>').join('');
-    return '<section class="card"><h2>' + esc(stopName(s.id)) + '</h2><div class="sub">Parada ' + esc(s.id) +
-      (s.lines ? ' · favoritas ★ ' + s.lines.map((x) => esc(lineInfo(x).n)).join(', ') : ' · todas favoritas') + ' · toca una línea para marcarla</div>' +
-      rows + '<div class="edit">' + toggles + '<button class="tg rm" data-rm="' + i + '">Quitar</button></div></section>';
+    return '<section class="card ed"><h2>' + esc(stopName(s.id)) + '</h2><div class="sub">Parada ' + esc(s.id) + '</div>' + body +
+      '<div class="edfoot"><button class="rmlink" data-rm="' + i + '">' + ICON_TRASH + 'Quitar parada</button></div></section>';
   }).join('');
 }
+const ICON_TRASH = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg>';
 
 // Fuente de cada hora: ● verde en vivo, ● ámbar dato viejo, 🕒 horario programado.
 function src(b) { return b.prog ? 'sched' : b.old ? 'old' : 'live'; }
@@ -496,14 +533,14 @@ function renderList(stops) {
       (then.length ? '<div class="then"><span>Luego</span>' + then.map(tchip).join('') + '</div>' : '') + leaveBox(first) + '</section>';
   }
   const groups = stops.map((s) => {
-    const bs = all.filter((b) => b.stop === s.id && !b.miss);
+    const bs = all.filter((b) => b.stop === s.id && !b.miss && b.fav); // las líneas apagadas en «Editar paradas» no salen
     const byLine = new Map();
     for (const b of bs) { if (!byLine.has(b.linea)) byLine.set(b.linea, []); byLine.get(b.linea).push(b); }
     const lines = [...byLine.entries()].map(([l, list]) => ({ l: l, list: list.slice(0, 3), fav: list[0].fav }))
       .sort((a, b) => (b.fav - a.fav) || a.list[0].left - b.list[0].left).slice(0, 5);
     const lead = bs.find((b) => b.fav) || bs[0];
     const key = lead ? lead.left : Infinity;
-    return { s: s, lines: lines, lead: lead, key: key, missed: all.some((b) => b.stop === s.id && b.miss) };
+    return { s: s, lines: lines, lead: lead, key: key, missed: all.some((b) => b.stop === s.id && b.miss && b.fav) };
   }).sort((a, b) => ((b.s.id === pinned) - (a.s.id === pinned)) || a.key - b.key);
   const card = (g) => {
     const d = data[g.s.id];
@@ -662,7 +699,11 @@ $('editbtn').onclick = () => {
   AD.q = ''; AD.place = null; AD.err = ''; AD.key = ''; $('q').value = ''; $('res').innerHTML = '';
   render(); if (on) renderAdd();
 };
-$('list').addEventListener('toggle', (e) => { if (e.target.classList && e.target.classList.contains('missed')) missOpen = e.target.open; }, true);
+$('list').addEventListener('toggle', (e) => {
+  const c = e.target.classList; if (!c) return;
+  if (c.contains('missed')) missOpen = e.target.open;
+  if (c.contains('nogo')) { const id = Number(e.target.dataset.s); if (e.target.open) edOpen.add(id); else edOpen.delete(id); }
+}, true);
 $('reset').onclick = () => openWizard({ trip: cfg });
 $('newtrip').onclick = () => { $('sheet').hidden = true; openWizard({}); };
 $('list').onclick = (e) => {
@@ -685,11 +726,14 @@ $('list').onclick = (e) => {
   }
   if (b.dataset.l) {
     const s = cfg[tab][Number(b.dataset.i)], lid = Number(b.dataset.l);
-    const d = data[s.id];
-    let set = s.lines ? s.lines.slice() : ((d && d.lineas) || []).map((l) => l.linea);
-    set = set.indexOf(lid) >= 0 ? set.filter((x) => x !== lid) : set.concat(lid);
-    s.lines = set.length ? set : null;
+    let set = s.lines ? s.lines.map(Number) : stopLines(s);
+    if (set.indexOf(lid) >= 0) {
+      if (set.length === 1) { toast('Deja al menos una línea. Si esta parada no te sirve, quítala.'); return; }
+      set = set.filter((x) => x !== lid);
+    } else set = set.concat(lid);
+    s.lines = set;
     save(); render();
+    const again = $('list').querySelector('[data-i="' + b.dataset.i + '"][data-l="' + lid + '"]'); if (again) again.focus();
   }
 };
 // ---------- Añadir parada (modo edición) ----------
@@ -849,7 +893,7 @@ function ensureLibs() {
     window.MiBusBuscador ? 0 : loadScript(PAGES + 'buscador.js'),
     fetch(PAGES + 'gtfs/meta.json').then((r) => r.json()),
     fetch(PAGES + 'gtfs/routes.json').then((r) => r.json()),
-  ]).then((x) => ({ P: window.MiBusPlanner.crear({ meta: x[2], routes: x[3] }), B: window.MiBusBuscador, meta: x[2] }))
+  ]).then((x) => (LIB = { P: window.MiBusPlanner.crear({ meta: x[2], routes: x[3] }), B: window.MiBusBuscador, meta: x[2] }))
     .catch((e) => { libs = null; throw e; });
   return libs;
 }
