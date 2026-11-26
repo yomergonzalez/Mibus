@@ -91,6 +91,16 @@ h1.brand svg{flex:none;margin:-2px 0 -4px -3px}
 .opt small{color:var(--mute);font-size:13px}.opt .chip{min-width:34px;height:26px;font-size:14px}
 .box{width:24px;height:24px;border-radius:7px;flex:none;border:2px solid #b9b9c0;display:grid;place-items:center;margin-top:2px;color:#fff}
 .opt[aria-pressed=true] .box{background:var(--red);border-color:var(--red)}
+.wtabs{display:flex;gap:4px;background:light-dark(#e3e3e8,#26262c);border-radius:12px;padding:3px}
+.wtabs button{flex:1;height:44px;border:0;border-radius:9px;background:none;font:600 15px Figtree,system-ui,sans-serif;color:var(--mute)}
+.wtabs button[aria-selected=true]{background:var(--card);color:var(--ink);font-weight:800;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.wdir{font-size:14px;color:var(--mute);margin:-4px 0 0}.wdir b{color:var(--ink)}
+.optl{background:var(--card);border-radius:16px;overflow:hidden;display:grid}
+.optl .opt{border:0;border-radius:0;background:none}.optl .opt+.opt{border-top:1px solid var(--line)}
+.optl .opt .h{flex-wrap:nowrap}.optl .opt .h em{flex:none;white-space:nowrap}.opt .nm{font-size:16px}.note.wwarn{color:light-dark(#9e0c24,#ff9aa8);font-weight:700}.opt .h b{font-size:16px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.opt .h .lc{max-width:none;flex-wrap:nowrap}
+.wbar{display:flex;gap:2px;height:20px;margin-top:5px}
+.wbar>span{border-radius:5px;display:flex;align-items:center;justify-content:center;gap:3px;font-size:11px;font-weight:800;white-space:nowrap;overflow:hidden;min-width:30px;color:#fff}
+.wbar .w{background:light-dark(#e6e6eb,#2c2c33);color:light-dark(#4a4a52,#c4c4cc)}
 .best{font-size:12px;font-weight:800;color:light-dark(#9e0c24,#ff9aa8);background:var(--soft);border-radius:999px;padding:3px 9px}
 .note{font-size:14px;color:var(--mute);margin:0}
 .wcard{background:var(--card);border-radius:16px;padding:12px 14px;display:grid;gap:10px}
@@ -972,6 +982,9 @@ function ensureLibs() {
 }
 const ICON_PIN = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>';
 const ICON_CHECK = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"/></svg>';
+const ICON_WALK = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="13" cy="4" r="2"/><path d="M10 21l2-6 3 3v3M8 12l3-4 4 3 3 1M11 8l-1 6"/></svg>';
+const ICON_BUS = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="3" width="14" height="14" rx="2"/><path d="M5 10h14M8 20v-3M16 20v-3"/></svg>';
+const lineColor = (l) => { const m = W && W.lib && W.lib.meta.lines[l]; return m && /^#[0-9a-f]{3,8}$/i.test(m.c || '') ? m.c : lineInfo(Number(l)).c; };
 const TIPO = { popular: 'Sitio', sitio: 'Sitio', direccion: 'Dirección', calle: 'Calle', parada: 'Parada' };
 const chipsOf = (ids) => '<span class="lc">' + ids.map((l) => { const m = W && W.lib && W.lib.meta.lines[l]; const li = m ? { n: m.n, c: /^#[0-9a-f]{3,8}$/i.test(m.c || '') ? m.c : lineInfo(Number(l)).c } : lineInfo(Number(l)); return '<span class="chip" style="background:' + li.c + '">' + esc(li.n) + '</span>'; }).join('') + '</span>';
 
@@ -1012,14 +1025,21 @@ function wLocate() {
   }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
 }
 
-// Paradas para cada sentido: una tarjeta por parada con todas las líneas que te llevan.
+// Paradas para cada sentido: una fila por parada con todas las líneas que te llevan.
 // Se marcan solas las más rápidas (hasta 5 min peor que la mejor) que aporten alguna línea nueva.
 function stopGroups(list, prev) {
   const g = W.lib.P.porParadaDeSubida(list).map((x) => {
     const best = x.opciones.reduce((a, o) => (o.total < a.total ? o : a));
     return { id: x.parada.id, nombre: x.parada.nombre, lineas: x.opciones.map((o) => o.linea), best };
   }).sort((a, b) => a.best.total - b.best.total || a.best.minAndandoIni - b.best.minAndandoIni);
-  const out = g.filter((x) => x.best.total <= (g[0] ? g[0].best.total : 0) + 10).slice(0, 6);
+  // Solo la mejor parada de cada línea: una parada que no añade ninguna línea nueva no sale
+  // (p. ej. el 22 en Fisterra 192 y en Fisterra 256). Las ya guardadas en el trayecto sí salen.
+  const kept = new Set((prev || []).map((s) => String(s.id))), seenL = new Set();
+  const out = g.filter((x) => x.best.total <= (g[0] ? g[0].best.total : 0) + 10).filter((x) => {
+    const nueva = x.lineas.some((l) => !seenL.has(l));
+    x.lineas.forEach((l) => seenL.add(l));
+    return nueva || kept.has(x.id);
+  }).slice(0, 6);
   const sel = new Set();
   if (prev && prev.length) { for (const x of out) if (prev.some((s) => String(s.id) === x.id)) sel.add(x.id); }
   if (!sel.size && out.length) {
@@ -1044,6 +1064,7 @@ function wCompute() {
   W.ida = stopGroups(P.opcionesDirectas(W.origen.pos, W.destino.pos, r), W.trip && W.trip.ida);
   W.vta = stopGroups(P.opcionesDirectas(W.destino.pos, W.origen.pos, r), W.trip && W.trip.vuelta);
   W.opts = W.ida.list;
+  W.tab = 'ida'; W.needVta = false;
   // Para explicar por qué no sale nada: lo que se tarda andando y si hay bus directo aunque sea más lento.
   W.walkM = P.distM(W.origen.pos, W.destino.pos);
   W.walkMin = P.minAndando(W.walkM);
@@ -1140,21 +1161,31 @@ function wRender() {
     if (!W.locating && !W.origen) h += '<button class="ghost" data-a="type">Prefiero escribir mi calle</button>';
   } else if (W.step === 2) h = wSearchHTML(false);
   else {
-    h = '<div><h2 id="wt">Así llegas a ' + esc(W.destino.nombre) + '</h2>' + (W.opts && !W.opts.length ? '' : '<p class="lead">Hemos marcado las paradas más rápidas con bus directo, para ir y para volver. Toca una para quitarla o añadirla.</p>') + '</div>';
+    h = '<div><h2 id="wt">Así llegas a ' + esc(W.destino.nombre) + '</h2>' + (W.opts && !W.opts.length ? '' : '<p class="lead">Estas líneas te llevan directo. Quita las que no quieras ver. Revisa también la vuelta.</p>') + '</div>';
     if (!W.opts) h += '<p class="note">' + esc(W.err || 'Calculando…') + '</p>' + (W.libErr ? '<button class="ghost" data-a="retry">Reintentar</button>' : '');
     else if (!W.opts.length) h += wEmpty();
     else {
       if (W.anyway) h += '<p class="note">Andando tardas unos ' + W.walkMin + ' min. Estas son las opciones en bus, aunque tarden más.</p>';
+      // Barra del viaje: gris = andando, color de la línea = en el bus; cada tramo, proporcional a sus minutos.
+      const bar = (o) => '<span class="wbar" aria-hidden="true"><span class="w" style="flex:' + o.minAndandoIni + '">' + ICON_WALK + o.minAndandoIni + '</span>' +
+        '<span style="flex:' + o.minBus + ';background:' + lineColor(o.linea) + '">' + ICON_BUS + o.minBus + ' min</span>' +
+        (o.minAndandoFin ? '<span class="w" style="flex:' + o.minAndandoFin + '">' + ICON_WALK + o.minAndandoFin + ' min</span>' : '') + '</span>';
       const card = (dir, x) => {
-        const on = W[dir].sel.has(x.id), o = x.best;
-        return '<button class="opt" data-g="' + dir + '|' + esc(x.id) + '" aria-pressed="' + on + '"><span class="box">' + (on ? ICON_CHECK : '') + '</span><span>' +
-          '<span class="h">' + chipsOf(x.lineas) + (x === W[dir].list[0] && W[dir].tag ? '<span class="best">' + W[dir].tag + '</span>' : '') + '<em>' + o.total + ' min</em></span>' +
-          '<b>' + esc(x.nombre) + '</b><small>' + o.minAndandoIni + ' min a pie · ' + o.minBus + ' en bus · bajas en ' + esc(o.baja.nombre) + '</small></span></button>';
+        const on = W[dir].sel.has(x.id), o = x.best, tag = x === W[dir].list[0] && W[dir].tag;
+        const aria = o.minAndandoIni + ' min andando hasta la parada, ' + o.minBus + ' en bus' + (o.minAndandoFin ? ' y ' + o.minAndandoFin + ' andando' : '');
+        return '<button class="opt" data-g="' + dir + '|' + esc(x.id) + '" aria-pressed="' + on + '" aria-description="' + esc(aria) + '"><span class="box">' + (on ? ICON_CHECK : '') + '</span><span>' +
+          (x.lineas.length > 2 ? '<span class="h">' + chipsOf(x.lineas) + '<em>' + o.total + ' min</em></span><b class="nm">' + esc(x.nombre) + '</b>'
+            : '<span class="h">' + chipsOf(x.lineas) + '<b>' + esc(x.nombre) + '</b><em>' + o.total + ' min</em></span>') + bar(o) +
+          '<small>' + (tag ? '<span class="best">' + tag + '</span> ' : '') + 'Bajas en ' + esc(o.baja.nombre) + '</small></span></button>';
       };
-      const n = W.ida.sel.size;
-      h += '<div class="lab">Para ir · ' + esc(W.origen.nombre || 'Casa') + ' → ' + esc(W.destino.nombre) + '</div><div class="opts">' + W.ida.list.map((x) => card('ida', x)).join('') + '</div>';
-      h += '<div class="lab">Para volver · ' + esc(W.destino.nombre) + ' → ' + esc(W.origen.nombre || 'Casa') + '</div>' +
-        (W.vta.list.length ? '<div class="opts">' + W.vta.list.map((x) => card('vta', x)).join('') + '</div>' : '<p class="note">No hay bus directo de vuelta; la vuelta quedará vacía.</p>');
+      const n = W.ida.sel.size, tab = W.tab === 'vta' ? 'vta' : 'ida', ori = esc(W.origen.nombre || 'Casa'), des = esc(W.destino.nombre);
+      h += '<div class="wtabs" role="tablist" aria-label="Sentido">' +
+        '<button role="tab" data-a="tab" data-t="ida" aria-selected="' + (tab === 'ida') + '">Ida</button>' +
+        '<button role="tab" data-a="tab" data-t="vta" aria-selected="' + (tab === 'vta') + '">Vuelta</button></div>' +
+        '<p class="wdir">De <b>' + (tab === 'ida' ? ori : des) + '</b> a <b>' + (tab === 'ida' ? des : ori) + '</b></p>';
+      if (tab === 'vta' && W.needVta && W.vta.list.length && !W.vta.sel.size) h += '<p class="note wwarn" role="alert">Elige al menos una parada para volver.</p>';
+      h += W[tab].list.length ? '<div class="optl" role="tabpanel">' + W[tab].list.map((x) => card(tab, x)).join('') + '</div>'
+        : '<p class="note">No hay bus directo de vuelta; la vuelta quedará vacía.</p>';
       h += '<div class="wcard"><div class="wnm" style="border:0;padding:0"><label for="worig">Sales desde</label><input id="worig" maxlength="40" value="' + esc(W.origen.nombre || 'Casa') + '"></div>' +
         '<div class="wnm"><label for="wname">Vas a</label><input id="wname" maxlength="40" value="' + esc(W.nombre || W.destino.nombre) + '"></div></div>' +
         '<div class="wfoot"><button class="bigbtn" data-a="save"' + (n ? '' : ' disabled') + '>' + (n ? 'Guardar trayecto' : 'Marca al menos una parada para ir') + '</button></div>';
@@ -1175,7 +1206,12 @@ $('wb').onclick = (e) => {
   else if (a === 'retry') { W.libErr = false; W.err = ''; wRender(); wLoadLibs(); }
   else if (a === 'dest') { W.step = 2; W.q = ''; W.opts = null; W.anyway = false; wRender(); }
   else if (a === 'anyway') { W.anyway = true; wCompute(); wRender(); $('wiz').scrollTop = 0; }
-  else if (a === 'save') wSave();
+  else if (a === 'save') {
+    // Si hay buses de vuelta y no ha marcado ninguno, le llevamos a la pestaña Vuelta antes de guardar.
+    if (W.vta.list.length && !W.vta.sel.size) { W.tab = 'vta'; W.needVta = true; wRender(); const t = document.querySelector('.wtabs'); if (t) t.scrollIntoView({ block: 'start', behavior: 'smooth' }); }
+    else wSave();
+  }
+  else if (a === 'tab') { W.tab = b.dataset.t === 'vta' ? 'vta' : 'ida'; wRender(); }
   else if (b.dataset.k != null) {
     const r = W.res[Number(b.dataset.k)]; if (!r) return;
     if (W.step === 1) { W.origen = { nombre: 'Casa', pos: r.pos, label: r.nombre }; W.mode = 'loc'; W.q = ''; wRender(); }
