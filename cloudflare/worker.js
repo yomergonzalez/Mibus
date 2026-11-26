@@ -117,7 +117,26 @@ async function handle(req, env, ctx) {
       return new Response(ICON, { headers: { 'content-type': 'image/svg+xml', 'cache-control': 'public, max-age=604800' } });
     }
 
-    return new Response(HTML, { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-cache' } });
+    return serveApp();
+}
+
+// La web es una sola: index.html de GitHub Pages. El Worker la sirve tal cual en su dominio
+// (misma configuración guardada en el navegador) y solo usa la copia vieja (HTML) si Pages falla.
+var APP_URL = 'https://yomergonzalez.github.io/Mibus/';
+async function serveApp() {
+  const headers = { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-cache' };
+  try {
+    const html = await pubMemo('app:html', 5 * 60e3, async () => {
+      const r = await fetch(APP_URL, { headers: { 'Accept': 'text/html' } });
+      if (!r.ok) throw new Error('Pages ' + r.status);
+      const t = await r.text();
+      if (t.indexOf('const PROXY') < 0) throw new Error('Pages: no parece la app');
+      return t;
+    });
+    return new Response(html, { headers });
+  } catch (e) {
+    return new Response(HTML, { headers });
+  }
 }
 
 function json(obj, status = 200, cache = 'no-store') {
