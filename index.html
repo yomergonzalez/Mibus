@@ -957,13 +957,16 @@ $('pb').onclick = runPlan;
 const PAGES = location.protocol === 'file:' ? 'https://yomergonzalez.github.io/Mibus/' : '';
 let libs = null, W = null, wTimer = 0;
 function loadScript(src) { return new Promise((ok, ko) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = ko; document.head.appendChild(s); }); }
+// Con mala cobertura un fetch puede quedarse colgado sin fallar nunca: sin límite, el asistente
+// se quedaba en «Cargando paradas…» hasta recargar. A los 15 s se da por fallido y se puede reintentar.
+const conLimite = (p, ms) => Promise.race([p, new Promise((_, ko) => setTimeout(() => ko(new Error('timeout')), ms))]);
 function ensureLibs() {
-  if (!libs) libs = Promise.all([
+  if (!libs) libs = conLimite(Promise.all([
     window.MiBusPlanner ? 0 : loadScript(PAGES + 'planner.js'),
     window.MiBusBuscador ? 0 : loadScript(PAGES + 'buscador.js'),
     fetch(PAGES + 'gtfs/meta.json').then((r) => r.json()),
     fetch(PAGES + 'gtfs/routes.json').then((r) => r.json()),
-  ]).then((x) => (LIB = { P: window.MiBusPlanner.crear({ meta: x[2], routes: x[3] }), B: window.MiBusBuscador, meta: x[2] }))
+  ]), 15000).then((x) => (LIB = { P: window.MiBusPlanner.crear({ meta: x[2], routes: x[3] }), B: window.MiBusBuscador, meta: x[2] }))
     .catch((e) => { libs = null; throw e; });
   return libs;
 }
@@ -981,9 +984,13 @@ function openWizard(o) {
   }
   $('wiz').hidden = false; document.body.style.overflow = 'hidden';
   wRender();
-  ensureLibs().then((l) => { if (!W) return; W.lib = l; if (W.step === 3) wCompute(); wRender(); })
-    .catch(() => { if (W) { W.err = 'No se pudieron cargar las paradas. Comprueba la conexión y vuelve a intentarlo.'; wRender(); } });
+  wLoadLibs();
   if (!W.trip) wLocate();
+}
+function wLoadLibs() {
+  const w = W;
+  ensureLibs().then((l) => { if (W !== w) return; W.lib = l; if (W.libErr) W.err = ''; W.libErr = false; if (W.step === 3) wCompute(); wRender(); })
+    .catch(() => { if (W !== w) return; W.libErr = true; W.err = 'No se pudieron cargar las paradas. Comprueba la conexión y vuelve a intentarlo.'; wRender(); });
 }
 function closeWizard() { W = null; $('wiz').hidden = true; document.body.style.overflow = ''; }
 function toast(t, act) {
@@ -1114,7 +1121,7 @@ function wRender() {
       const near = W.lib ? W.lib.P.paradasCerca(W.origen.pos, 600, 6) : null;
       h += '<div class="here">' + ICON_PIN + '<span><b>' + esc(W.origen.label || (near && near[0] ? 'Estás cerca de ' + near[0].nombre : 'Tu ubicación')) + '</b><small>' + (W.origen.aqui ? 'Ubicación actual' : 'Punto de salida') + '</small></span><button data-a="type">Cambiar</button></div>';
       h += '<div class="lab">Paradas a menos de 10 min andando</div>';
-      if (!near) h += '<p class="note">' + esc(W.err || 'Cargando paradas…') + '</p>';
+      if (!near) h += '<p class="note">' + esc(W.err || 'Cargando paradas…') + '</p>' + (W.libErr ? '<button class="ghost" data-a="retry">Reintentar</button>' : '');
       else if (!near.length) h += '<p class="note">No hay paradas de bus a menos de 10 minutos de aquí.</p>';
       else h += '<div class="lst">' + near.map((p) => '<div><span><b>' + esc(p.nombre) + '</b><small>' + p.minAndando + ' min andando</small></span>' + chipsOf(p.lineas) + '</div>').join('') + '</div>' +
         '<p class="note">No tienes que elegir ahora: en el paso 3 marcamos solas las que te llevan a tu destino.</p>';
@@ -1126,7 +1133,7 @@ function wRender() {
   } else if (W.step === 2) h = wSearchHTML(false);
   else {
     h = '<div><h2 id="wt">Así llegas a ' + esc(W.destino.nombre) + '</h2>' + (W.opts && !W.opts.length ? '' : '<p class="lead">Hemos marcado las paradas más rápidas con bus directo, para ir y para volver. Toca una para quitarla o añadirla.</p>') + '</div>';
-    if (!W.opts) h += '<p class="note">' + esc(W.err || 'Calculando…') + '</p>';
+    if (!W.opts) h += '<p class="note">' + esc(W.err || 'Calculando…') + '</p>' + (W.libErr ? '<button class="ghost" data-a="retry">Reintentar</button>' : '');
     else if (!W.opts.length) h += wEmpty();
     else {
       if (W.anyway) h += '<p class="note">Andando tardas unos ' + W.walkMin + ' min. Estas son las opciones en bus, aunque tarden más.</p>';
@@ -1157,6 +1164,7 @@ $('wb').onclick = (e) => {
   if (a === 'next') { W.step = 2; W.q = ''; wRender(); }
   else if (a === 'type') { W.mode = 'type'; W.origen = null; W.q = ''; W.err = ''; wRender(); }
   else if (a === 'loc') wLocate();
+  else if (a === 'retry') { W.libErr = false; W.err = ''; wRender(); wLoadLibs(); }
   else if (a === 'dest') { W.step = 2; W.q = ''; W.opts = null; W.anyway = false; wRender(); }
   else if (a === 'anyway') { W.anyway = true; wCompute(); wRender(); $('wiz').scrollTop = 0; }
   else if (a === 'save') wSave();
