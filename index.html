@@ -32,6 +32,7 @@ h1{font-size:22px;line-height:1.05;margin:0;font-weight:800}
 .tcard{border:1.5px solid var(--line);border-radius:16px;overflow:hidden}
 .tcard>h3{margin:0;padding:10px 14px 8px;font-size:17px;font-weight:800;display:flex;align-items:baseline;gap:8px}
 .tcard>h3 small{font-size:13px;font-weight:500;color:var(--mute)}
+.tedit{margin:-8px -6px -8px auto;align-self:center;display:flex;align-items:center;gap:5px;min-height:44px;padding:0 8px;border:0;border-radius:10px;background:transparent;color:var(--red);font:700 14px Figtree,system-ui,sans-serif}
 .topt{display:flex;align-items:center;gap:10px;width:100%;min-height:58px;padding:8px 12px;border:0;border-top:1px solid var(--line);background:var(--card);color:var(--ink);text-align:left;font:inherit;box-shadow:inset 4px 0 0 transparent}
 .topt[aria-pressed=true]{background:var(--soft);box-shadow:inset 4px 0 0 var(--red)}
 .topt>span:not(.dir){flex:1;min-width:0}.topt b{display:block;font-size:15px}.topt small{display:block;font-size:12px;color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -226,7 +227,6 @@ footer{color:var(--mute);font-size:13px;text-align:center;padding:0 16px 28px}
     <div id="triplist" style="display:grid;gap:6px"></div>
     <div class="acts">
       <button class="act red" id="newtrip">+ Nuevo destino</button>
-      <button class="act" id="edittrip">Editar paradas de este trayecto</button>
       <button class="act danger" id="deltrip">Borrar este trayecto</button>
     </div>
   </div>
@@ -614,15 +614,17 @@ let delArmed = false;
 function openSheet() {
   delArmed = false;
   $('deltrip').textContent = 'Borrar este trayecto';
-  $('deltrip').hidden = !store.trips.length; $('edittrip').hidden = !store.trips.length;
+  $('deltrip').hidden = !store.trips.length;
   // Una tarjeta por destino, con la ida y la vuelta dentro y etiquetadas.
+  const PENCIL = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/></svg>';
   const ARROW = { ida: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
     vuelta: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>' };
-  $('triplist').innerHTML = store.trips.map((t) => '<div class="tcard"><h3>' + esc(t.destino.nombre) + '<small>desde ' + esc(t.origen.nombre) + '</small></h3>' + ['ida', 'vuelta'].map((d) => {
+  $('triplist').innerHTML = store.trips.map((t) => '<div class="tcard"><h3>' + esc(t.destino.nombre) + '<small>desde ' + esc(t.origen.nombre) + '</small>' +
+    '<button class="tedit" data-edit="' + esc(t.id) + '" aria-label="Editar paradas de ' + esc(t.destino.nombre) + '">' + PENCIL + 'Editar</button></h3>' + ['ida', 'vuelta'].map((d) => {
     const n = names(t, d), on = t === cfg && d === tab;
     const sub = t[d].map((s) => shortName(s.id) + (s.lines ? ' (' + s.lines.map((l) => lineInfo(l).n).join(', ') + ')' : '')).join(' · ');
     return '<button class="topt" data-trip="' + esc(t.id) + '" data-dir="' + d + '" aria-pressed="' + on + '"><span class="dir ' + d + '">' + (d === 'ida' ? 'IDA ' + ARROW.ida : ARROW.vuelta + ' VUELTA') + '</span>' +
-      '<span><b>' + esc(n.from) + ' → ' + esc(n.to) + '</b><small>' + esc(sub || 'Sin paradas · Editar paradas para añadirlas') + '</small></span>' +
+      '<span><b>' + esc(n.from) + ' → ' + esc(n.to) + '</b><small>' + esc(sub || 'Sin paradas · toca Editar para añadirlas') + '</small></span>' +
       (on ? '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#c8102e" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-label="Abierto"><path d="M5 12.5l4.5 4.5L19 7"/></svg>' : '') + '</button>';
   }).join('') + '</div>').join('');
   $('sheet').hidden = false;
@@ -632,12 +634,18 @@ function closeSheet() { $('sheet').hidden = true; $('tripbtn').focus(); }
 $('tripbtn').onclick = openSheet;
 $('scrim').onclick = closeSheet;
 $('sheet').addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSheet(); });
-$('triplist').onclick = (e) => { const b = e.target.closest('[data-trip]'); if (!b) return; $('sheet').hidden = true; setTrip(b.dataset.trip, b.dataset.dir); };
-$('edittrip').onclick = () => {
-  $('sheet').hidden = true;
-  if (!document.body.classList.contains('editing')) $('editbtn').click();
-  $('list').scrollIntoView({ behavior: 'smooth' });
-};
+$('triplist').onclick = (e) => {
+  const ed = e.target.closest('[data-edit]');
+  if (ed) {
+    // Edita el sentido abierto si es este destino; si no, la ida (con Volver se cambia de sentido).
+    const t = store.trips.find((x) => x.id === ed.dataset.edit); if (!t) return;
+    $('sheet').hidden = true;
+    if (t !== cfg) setTrip(t.id, 'ida');
+    if (!document.body.classList.contains('editing')) $('editbtn').click();
+    $('list').scrollIntoView({ behavior: 'smooth' });
+    return;
+  }
+  const b = e.target.closest('[data-trip]'); if (!b) return; $('sheet').hidden = true; setTrip(b.dataset.trip, b.dataset.dir); };
 $('deltrip').onclick = () => {
   if (!store.trips.length) return;
   if (!delArmed) { delArmed = true; $('deltrip').textContent = 'Toca otra vez para borrar ' + names(cfg, 'ida').from + ' → ' + names(cfg, 'ida').to; return; }
