@@ -1026,7 +1026,7 @@ function wLocate() {
 }
 
 // Paradas para cada sentido: una fila por parada con todas las líneas que te llevan.
-// Se marcan solas las más rápidas (hasta 5 min peor que la mejor) que aporten alguna línea nueva.
+// Se marca sola la más rápida y otra casi igual (≤ 2 min más), como mucho 2.
 function stopGroups(list, prev) {
   const g = W.lib.P.porParadaDeSubida(list).map((x) => {
     const best = x.opciones.reduce((a, o) => (o.total < a.total ? o : a));
@@ -1042,12 +1042,10 @@ function stopGroups(list, prev) {
   }).slice(0, 6);
   const sel = new Set();
   if (prev && prev.length) { for (const x of out) if (prev.some((s) => String(s.id) === x.id)) sel.add(x.id); }
+  // Por defecto solo la más rápida y, si otra es casi igual (2 min o menos), también esa; como mucho 2.
   if (!sel.size && out.length) {
-    const seen = new Set(), top = out[0].best.total;
-    for (const x of out) {
-      if (sel.size >= 4 || x.best.total > top + 5) break;
-      if (x.lineas.some((l) => !seen.has(l))) { sel.add(x.id); x.lineas.forEach((l) => seen.add(l)); }
-    }
+    const top = out[0].best.total;
+    for (const x of out) { if (sel.size >= 2 || x.best.total > top + 2) break; sel.add(x.id); }
   }
   return { list: out, sel, tag: bestTag(out) };
 }
