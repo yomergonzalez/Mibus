@@ -52,7 +52,7 @@ main{max-width:640px;margin:0 auto;padding:10px 10px 14px;display:grid;gap:10px}
 .hero .big small{font-size:15px;margin-left:3px}
 .hero .big.now{color:var(--red);font-size:28px}
 .hero .at b{font-size:20px}
-.chip{box-shadow:inset 0 -2px 0 rgba(0,0,0,.15)}.stp{font-size:12px;color:var(--mute);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chip{box-shadow:inset 0 -2px 0 rgba(0,0,0,.15)}.stp{font-size:12px;color:var(--mute);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.stp::before{content:"🚏 "}
 .at{text-align:right;white-space:nowrap}
 .at b{display:block;font-size:15px;font-variant-numeric:tabular-nums}
 .at span{color:var(--mute);font-size:11px}
@@ -223,10 +223,9 @@ function render() {
       rows = buses.slice(0, 4).map((b) => {
         const li = lineInfo(b.linea);
         const left = Math.max(0, Math.round(b.t - elapsed));
-        const km = b.dist >= 1000 ? (b.dist / 1000).toLocaleString('es-ES', { maximumFractionDigits: 1 }) + ' km' : b.dist + ' m';
         return '<div class="row"><div class="chip" style="background:' + li.c + '">' + esc(li.n) + '</div>' +
           (left <= 1 ? '<div class="min now">Llegando</div>' : '<div class="min">' + left + '<small>min</small></div>') +
-          '<div class="at"><b>' + hhmm(d.at + b.t * 60000) + '</b><span>a ' + esc(km) + '</span></div></div>';
+          '<div class="at"><b>' + hhmm(d.at + b.t * 60000) + '</b></div></div>';
       }).join('') || '<div class="empty">Sin buses próximos ahora mismo.</div>';
       if (d.err && !(d.lineas || []).length) rows = '<div class="err">No se pudo conectar con iTranvías ahora mismo. Pulsa Actualizar.</div>'; else if (d.err) rows = '<div class="err">Sin conexión; mostrando el último dato.</div>' + rows;
     }
@@ -242,6 +241,8 @@ function render() {
 
 // Fuente de cada hora: ● verde en vivo, ● ámbar dato viejo, 🕒 horario programado.
 function src(b) { return b.prog ? 'sched' : b.old ? 'old' : 'live'; }
+// Bajo la hora solo va el aviso de la fuente; los metros del bus no se muestran (confundían).
+function tag(b) { return b.prog ? '<span>según horario</span>' : b.ghost ? '<span>sin señal</span>' : ''; }
 function shortName(id) { return stopName(id).replace(/^(Rda\.|Av\.) de /, ''); }
 function renderList(allStops) {
   if (filt != null && !allStops.some((s) => s.id === filt)) filt = null;
@@ -274,15 +275,14 @@ function renderList(allStops) {
     const li = lineInfo(first.linea);
     hero = '<section class="hero"><div class="chip" style="background:' + li.c + '">' + esc(li.n) + '</div><div class="mid"><div class="lbl">Próximo bus</div>' +
       (first.left <= 1 && !first.prog ? '<div class="big now ' + src(first) + '">Llegando</div>' : '<div class="big ' + src(first) + '">' + first.left + '<small>min</small></div>') +
-      '<div class="stp">' + esc(stopName(first.stop)) + '</div></div><div class="at"><b class="' + src(first) + '">' + hhmm(first.at) + '</b><span>' + (first.prog ? 'según horario' : first.ghost ? 'sin señal' : 'a ' + esc(fmtKm(first.dist))) + '</span></div></section>';
+      '<div class="stp">' + esc(stopName(first.stop)) + '</div></div><div class="at"><b class="' + src(first) + '">' + hhmm(first.at) + '</b>' + tag(first) + '</div></section>';
   }
   const row = (b, cls) => {
     const li = lineInfo(b.linea);
-    const km = fmtKm(b.dist);
     return '<div class="row ' + cls + '"><div class="chip" style="background:' + li.c + '">' + esc(li.n) + '</div>' +
       '<div class="mid">' + (b.left <= 1 && !b.prog ? '<div class="min now ' + src(b) + '">Llegando</div>' : '<div class="min ' + src(b) + '">' + b.left + '<small>min</small>' + (b.fav ? '<span class="fav" aria-label="favorita">★</span>' : '') + '</div>') +
       '<div class="stp">' + esc(stopName(b.stop)) + '</div></div>' +
-      '<div class="at"><b class="' + src(b) + '">' + hhmm(b.at) + '</b><span>' + (b.prog ? 'según horario' : b.ghost ? 'sin señal' : 'a ' + esc(km)) + '</span></div></div>';
+      '<div class="at"><b class="' + src(b) + '">' + hhmm(b.at) + '</b>' + tag(b) + '</div></div>';
   };
   let rows = favs.slice(1, 8).map((b) => row(b, '')).join('');
   const otherRows = others.slice(0, 6).map((b) => row(b, 'other')).join('');
@@ -296,7 +296,6 @@ function renderList(allStops) {
 
 function mins(v) { if (String(v).indexOf('<') >= 0) return 0; const n = parseFloat(String(v == null ? '' : v).replace(',', '.').replace(/[^0-9.]/g, '')); return isFinite(n) ? n : 0; }
 function metres(v) { const n = parseFloat(String(v == null ? '' : v).replace(/[^0-9.]/g, '')); return isFinite(n) ? n : 0; }
-function fmtKm(d) { return d >= 1000 ? (d / 1000).toLocaleString('es-ES', { maximumFractionDigits: 1 }) + ' km' : d + ' m'; }
 function posOf(id) { return (meta.pos && meta.pos[id]) || FALL_POS[id] || null; }
 function centre(list) {
   const pts = list.map((s) => posOf(s.id)).filter(Boolean);
