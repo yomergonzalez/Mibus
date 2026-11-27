@@ -104,7 +104,8 @@ h1.brand svg{flex:none;margin:-2px 0 -4px -3px}
 .wbar{display:flex;gap:2px;height:20px;margin-top:5px}
 .wbar>span{border-radius:5px;display:flex;align-items:center;justify-content:center;gap:3px;font-size:11px;font-weight:800;white-space:nowrap;overflow:hidden;min-width:30px;color:#fff}
 .wbar .w{background:light-dark(#e6e6eb,#2c2c33);color:light-dark(#4a4a52,#c4c4cc)}
-.via-ar{color:var(--mute);font-weight:800;flex:none}
+.vopt{flex:1;min-width:0;display:grid;gap:2px}.vr{display:flex;align-items:center;gap:6px;min-width:0}.vr .lc{flex:none;max-width:none;flex-wrap:nowrap}.vr b{flex:1;min-width:0;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.vr em{flex:none;font-style:normal;font-weight:800}
+.vk{display:flex;align-items:center;gap:6px;margin-left:15px;padding:3px 0 3px 14px;border-left:3px dotted light-dark(#c9c9d1,#44444c);font-size:13px;color:var(--mute)}.vk svg{flex:none}
 .best{font-size:12px;font-weight:800;color:light-dark(#9e0c24,#ff9aa8);background:var(--soft);border-radius:999px;padding:3px 9px}
 .note{font-size:14px;color:var(--mute);margin:0}
 .wcard{background:var(--card);border-radius:16px;padding:12px 14px;display:grid;gap:10px}
@@ -1392,20 +1393,16 @@ function wRender() {
             : '<span class="h">' + chipsOf(x.lineas) + '<b>' + esc(x.nombre) + '</b><em>' + o.total + ' min</em></span>') + bar(o) +
           '<small>' + (tag ? '<span class="best">' + tag + '</span> ' : '') + 'Bajas en ' + esc(o.baja.nombre) + '</small></span></button>';
       };
-      // Con un cambio: andar | 1.er bus | andar | 2.º bus | andar.
-      const vbar = (o) => '<span class="wbar" aria-hidden="true"><span class="w" style="flex:' + o.minAndandoIni + '">' + ICON_WALK + o.minAndandoIni + '</span>' +
-        '<span style="flex:' + o.minBus + ';background:' + lineColor(o.linea) + '">' + o.minBus + '</span>' +
-        (o.minCambio ? '<span class="w" style="flex:' + o.minCambio + '">' + ICON_WALK + o.minCambio + '</span>' : '') +
-        '<span style="flex:' + o.minBus2 + ';background:' + lineColor(o.linea2) + '">' + ICON_BUS + o.minBus2 + ' min</span>' +
-        (o.minAndandoFin ? '<span class="w" style="flex:' + o.minAndandoFin + '">' + o.minAndandoFin + '</span>' : '') + '</span>';
+      // Con un cambio, en dos filas como la tarjeta: 1.er bus y su parada, «N min a pie · cambias en…», 2.º bus y su parada.
+      const short = (n) => String(n).replace(/^(Rda\.|Av\.|Avda\.|Pza\.) (de )?/, '');
       const vcard = (dir, x) => {
         const on = W[dir].via.sel.has(x.key), o = x.best;
-        const cambio = o.minCambio ? o.minCambio + ' min andando a ' + o.sube2.nombre : 'en la misma parada';
-        const aria = o.minAndandoIni + ' min andando, ' + o.minBus + ' en bus, cambias ' + cambio + ', ' + o.minBus2 + ' en el ' + o.nombreLinea2;
-        return '<button class="opt" data-g="' + dir + '|v:' + esc(x.key) + '" aria-pressed="' + on + '" aria-description="' + esc(aria) + '"><span class="box">' + (on ? ICON_CHECK : '') + '</span><span>' +
-          (x.lineas.length > 1 ? '<span class="h">' + chipsOf(x.lineas) + '<span class="via-ar" aria-hidden="true">›</span>' + chipsOf([o.linea2]) + '<em>' + o.total + ' min</em></span><b class="nm">' + esc(x.nombre) + '</b>'
-            : '<span class="h">' + chipsOf(x.lineas) + '<span class="via-ar" aria-hidden="true">›</span>' + chipsOf([o.linea2]) + '<b>' + esc(x.nombre) + '</b><em>' + o.total + ' min</em></span>') + vbar(o) +
-          '<small>Cambias en ' + esc(o.baja.nombre) + (o.minCambio ? ': ' + o.minCambio + ' min andando a ' + esc(o.sube2.nombre) : '') + '</small></span></button>';
+        const cambio = (o.minCambio ? o.minCambio + ' min a pie · ' : '') + 'cambias en ' + short(o.baja.nombre);
+        const aria = o.minAndandoIni + ' min andando, ' + o.minBus + ' en bus, ' + cambio + ', ' + o.minBus2 + ' en el ' + o.nombreLinea2 + ' desde ' + o.sube2.nombre;
+        return '<button class="opt" data-g="' + dir + '|v:' + esc(x.key) + '" aria-pressed="' + on + '" aria-description="' + esc(aria) + '"><span class="box">' + (on ? ICON_CHECK : '') + '</span><span class="vopt">' +
+          '<span class="vr">' + chipsOf(x.lineas) + '<b>' + esc(short(x.nombre)) + '</b><em>' + o.total + ' min</em></span>' +
+          '<span class="vk">' + ICON_WALK + '<span>' + esc(cambio) + '</span></span>' +
+          '<span class="vr">' + chipsOf([o.linea2]) + '<b>' + esc(short(o.sube2.nombre)) + '</b></span></span></button>';
       };
       const n = nSel(W.ida), tab = W.tab === 'vta' ? 'vta' : 'ida', ori = esc(W.origen.nombre || 'Casa'), des = esc(W.destino.nombre);
       h += '<div class="wtabs" role="tablist" aria-label="Sentido">' +
