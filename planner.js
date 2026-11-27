@@ -16,9 +16,8 @@
  *
  * Funciona en el navegador (window.MiBusPlanner) y en Node (require('./planner.js')).
  *
- * Transbordos (pendiente): opcionesDirectas se apoya en tramos(), que devuelve cada
- * «subir en X → bajar en Y» posible. Un viaje con transbordo es encadenar dos tramos
- * cuya parada de bajada y de subida coinciden o están a pocos metros.
+ * Transbordos: opcionesConTransbordo encadena dos tramos() (cada «subir en X → bajar en Y»)
+ * cuya parada de bajada y la de subida del segundo bus están a pocos metros.
  */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory();
@@ -27,8 +26,8 @@
   'use strict';
 
   const R = 6371000;
-  const CAMINO = 1.3;        // las calles no son línea recta
-  const PASO = 80;           // metros por minuto andando (~4,8 km/h)
+  const CAMINO = 1.5;        // las calles no son línea recta (Google: 483 m en recta = 800 m por la calle)
+  const PASO = 70;           // metros por minuto andando (~4,2 km/h, con semáforos)
 
   function distM(a, b) {
     const rad = Math.PI / 180;
@@ -167,7 +166,59 @@
       return grupos;
     }
 
-    return { paradasCerca, opcionesDirectas, mejoresPorLinea, porParadaDeSubida, tramos, lineasDe, distM, minAndando };
+    /**
+     * Viajes con un cambio: un bus hasta cerca de otra parada, como mucho `cambioM` andando
+     * (250 m por defecto) y otro bus de otra línea hasta el destino.
+     * Devuelve, por pareja de líneas y parada de subida, el mejor; ordenados por tiempo total
+     * SIN contar la espera del segundo bus (eso se ve en vivo). Quita los que no ahorran nada
+     * frente a andar el tramo de antes o el de después.
+     * opts: radioOrigenM (600), radioDestinoM (400), cambioM (250).
+     */
+    function opcionesConTransbordo(origen, destino, opts) {
+      opts = opts || {};
+      const desde = paradasCerca(origen, opts.radioOrigenM || 600);
+      const hasta = paradasCerca(destino, opts.radioDestinoM || 400);
+      const cambioM = opts.cambioM || 250;
+      const todas = Object.keys(pos).filter((id) => porParada[id]).map((id) => ({ id, nombre: nombres[id] || 'Parada ' + id, minAndando: 0 }));
+      // Segundo tramo: cualquier parada → cerca del destino, indexado por parada de subida.
+      const segundo = {};
+      for (const t of tramos(todas, hasta)) (segundo[t.ini.id] = segundo[t.ini.id] || []).push(t);
+      const vecinas = {};
+      const cerca = (id) => vecinas[id] || (vecinas[id] = pos[id] ? paradasCerca(pos[id], cambioM) : []);
+      const mejor = {};
+      for (const a of tramos(desde, todas)) {
+        for (const c of cerca(a.fin.id)) {
+          for (const b of segundo[c.id] || []) {
+            if (b.r.linea === a.r.linea) continue;
+            const pie = c.id === a.fin.id ? 0 : c.minAndando;
+            const total = a.ini.minAndando + a.minBus + pie + b.minBus + b.fin.minAndando;
+            // Si desde la bajada del primero llegas andando igual de rápido, el segundo bus sobra.
+            if (minAndando(distM(pos[a.fin.id], destino)) <= pie + b.minBus + b.fin.minAndando + 3) continue;
+            // Y si andando hasta la parada del segundo tardas lo mismo que en el primer bus, el primero sobra.
+            if (pos[c.id] && minAndando(distM(origen, pos[c.id])) <= a.ini.minAndando + a.minBus + pie) continue;
+            const k = a.r.linea + '>' + b.r.linea + '|' + a.ini.id;
+            if (mejor[k] && mejor[k].total <= total) continue;
+            mejor[k] = {
+              linea: a.r.linea, nombreLinea: nombreLinea(a.r.linea),
+              sube: { id: a.ini.id, nombre: a.ini.nombre },
+              baja: { id: a.fin.id, nombre: a.fin.nombre },
+              minAndandoIni: a.ini.minAndando, minBus: a.minBus,
+              minCambio: pie,
+              linea2: b.r.linea, nombreLinea2: nombreLinea(b.r.linea),
+              sube2: { id: c.id, nombre: c.nombre },
+              baja2: { id: b.fin.id, nombre: b.fin.nombre },
+              minBus2: b.minBus, minAndandoFin: b.fin.minAndando,
+              total,
+            };
+          }
+        }
+      }
+      // Una por pareja de líneas y parada de subida, las más rápidas primero.
+      return Object.keys(mejor).map((k) => mejor[k])
+        .sort((x, y) => x.total - y.total || x.minAndandoIni - y.minAndandoIni);
+    }
+
+    return { paradasCerca, opcionesDirectas, opcionesConTransbordo, mejoresPorLinea, porParadaDeSubida, tramos, lineasDe, distM, minAndando };
   }
 
   return { crear, distM, minAndando };
