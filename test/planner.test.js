@@ -101,3 +101,19 @@ test('lineasDe: líneas que pasan por una parada, sin repetir', () => {
   assert.deepEqual(plan.lineasDe('1').sort(), ['100', '200']);
   assert.deepEqual(plan.lineasDe('99'), []);
 });
+
+test('opcionesConTransbordo: un bus, cambio a pocos metros y otro bus (GTFS real, casa → Marineda)', () => {
+  const real = MiBusPlanner.crear({
+    meta: JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'gtfs', 'meta.json'), 'utf8')),
+    routes: JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'gtfs', 'routes.json'), 'utf8')),
+  });
+  const casa = [43.3606, -8.4162], marineda = [43.345977, -8.428935];
+  const o = real.opcionesConTransbordo(casa, marineda);
+  assert.ok(o.length > 0);
+  // El segundo bus siempre es el 11 (1100), el único que llega a Marineda, y nunca la misma línea dos veces.
+  for (const x of o) { assert.equal(x.linea2, '1100'); assert.notEqual(x.linea, x.linea2); assert.ok(x.minCambio <= 5); }
+  // El 14 (1400) de Outeiro cambiando en Vioño al 11 de Av. de Arteixo está entre las opciones.
+  assert.ok(o.some((x) => x.linea === '1400' && /Vio/.test(x.baja.nombre) && /Arteixo/.test(x.sube2.nombre)), JSON.stringify(o.slice(0, 5).map((x) => [x.linea, x.baja.nombre, x.sube2.nombre])));
+  // Ordenadas por tiempo total.
+  for (let i = 1; i < o.length; i++) assert.ok(o[i - 1].total <= o[i].total);
+});
