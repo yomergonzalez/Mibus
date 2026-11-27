@@ -1398,7 +1398,7 @@ function wRender() {
       const vcard = (dir, x) => {
         const on = W[dir].via.sel.has(x.key), o = x.best;
         const cambio = (o.minCambio ? o.minCambio + ' min a pie · ' : '') + 'cambias en ' + short(o.baja.nombre);
-        const aria = o.minAndandoIni + ' min andando, ' + o.minBus + ' en bus, ' + cambio + ', ' + o.minBus2 + ' en el ' + o.nombreLinea2 + ' desde ' + o.sube2.nombre;
+        const aria = o.minAndandoIni + ' min andando, ' + o.minBus + ' en bus, ' + cambio + ', unos ' + o.minEspera + ' min de espera, ' + o.minBus2 + ' en el ' + o.nombreLinea2 + ' desde ' + o.sube2.nombre;
         return '<button class="opt" data-g="' + dir + '|v:' + esc(x.key) + '" aria-pressed="' + on + '" aria-description="' + esc(aria) + '"><span class="box">' + (on ? ICON_CHECK : '') + '</span><span class="vopt">' +
           '<span class="vr">' + chipsOf(x.lineas) + '<b>' + esc(short(x.nombre)) + '</b><em>' + o.total + ' min</em></span>' +
           '<span class="vk">' + ICON_WALK + '<span>' + esc(cambio) + '</span></span>' +
@@ -1414,7 +1414,7 @@ function wRender() {
       h += '<div role="tabpanel" style="display:grid;gap:10px">';
       if (D.list.length) h += (hasVia ? '<div class="lab">Directo</div>' : '') + '<div class="optl">' + D.list.map((x) => card(tab, x)).join('') + '</div>';
       if (hasVia) h += '<div class="lab">Con un cambio</div><div class="optl">' + D.via.list.map((x) => vcard(tab, x)).join('') + '</div>' +
-        '<p class="note">Sin contar lo que esperas al segundo bus: eso te lo decimos en vivo.</p>';
+        '<p class="note">El tiempo de las opciones con cambio cuenta lo que esperas de media al segundo bus. La espera real te la decimos en vivo.</p>';
       if (!nOpts(D)) h += '<p class="note">No hay bus de vuelta; la vuelta quedará vacía.</p>';
       h += '</div>';
       h += '<div class="wcard"><div class="wnm" style="border:0;padding:0"><label for="worig">Sales desde</label><input id="worig" maxlength="40" value="' + esc(W.origen.nombre || 'Casa') + '"></div>' +

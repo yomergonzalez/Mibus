@@ -169,8 +169,9 @@
     /**
      * Viajes con un cambio: un bus hasta cerca de otra parada, como mucho `cambioM` andando
      * (250 m por defecto) y otro bus de otra línea hasta el destino.
-     * Devuelve, por pareja de líneas y parada de subida, el mejor; ordenados por tiempo total
-     * SIN contar la espera del segundo bus (eso se ve en vivo). Quita los que no ahorran nada
+     * Devuelve, por pareja de líneas y parada de subida, el mejor; ordenados por tiempo total,
+     * que incluye la espera MEDIA al segundo bus (minEspera, la mitad de cada cuánto pasa;
+     * la espera real se ve en vivo). Como en los directos, no cuenta la espera al primero. Quita los que no ahorran nada
      * frente a andar el tramo de antes o el de después.
      * opts: radioOrigenM (600), radioDestinoM (400), cambioM (250).
      */
@@ -186,14 +187,26 @@
       const vecinas = {};
       const cerca = (id) => vecinas[id] || (vecinas[id] = pos[id] ? paradasCerca(pos[id], cambioM) : []);
       const mejor = {};
+      // Espera media al segundo bus: la mitad de cada cuánto pasa. «n» = viajes del sentido en todo el GTFS
+      // (6 tipos de día ≈ 5 laborables); en un laborable el bus va de ~7:00 a ~23:30 (990 min).
+      const esperas = {};
+      const espera = (r) => {
+        const k = r.linea + '|' + r.sentido;
+        if (!(k in esperas)) {
+          const n = (routes[r.linea][r.sentido] || []).reduce((t, v) => t + (v.n || 0), 0);
+          esperas[k] = n ? Math.round(Math.min(30, Math.max(4, (990 * 5) / n)) / 2) : 5;
+        }
+        return esperas[k];
+      };
       for (const a of tramos(desde, todas)) {
         for (const c of cerca(a.fin.id)) {
           for (const b of segundo[c.id] || []) {
             if (b.r.linea === a.r.linea) continue;
             const pie = c.id === a.fin.id ? 0 : c.minAndando;
-            const total = a.ini.minAndando + a.minBus + pie + b.minBus + b.fin.minAndando;
-            // Si desde la bajada del primero llegas andando igual de rápido, el segundo bus sobra.
-            if (minAndando(distM(pos[a.fin.id], destino)) <= pie + b.minBus + b.fin.minAndando + 3) continue;
+            const esp = espera(b.r);
+            const total = a.ini.minAndando + a.minBus + pie + esp + b.minBus + b.fin.minAndando;
+            // Si desde la bajada del primero llegas andando igual de rápido (contando la espera), el segundo bus sobra.
+            if (minAndando(distM(pos[a.fin.id], destino)) <= pie + esp + b.minBus + b.fin.minAndando + 3) continue;
             // Y si andando hasta la parada del segundo tardas lo mismo que en el primer bus, el primero sobra.
             if (pos[c.id] && minAndando(distM(origen, pos[c.id])) <= a.ini.minAndando + a.minBus + pie) continue;
             const k = a.r.linea + '>' + b.r.linea + '|' + a.ini.id;
@@ -203,7 +216,7 @@
               sube: { id: a.ini.id, nombre: a.ini.nombre },
               baja: { id: a.fin.id, nombre: a.fin.nombre },
               minAndandoIni: a.ini.minAndando, minBus: a.minBus,
-              minCambio: pie,
+              minCambio: pie, minEspera: esp,
               linea2: b.r.linea, nombreLinea2: nombreLinea(b.r.linea),
               sube2: { id: c.id, nombre: c.nombre },
               baja2: { id: b.fin.id, nombre: b.fin.nombre },
