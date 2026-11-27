@@ -1538,7 +1538,10 @@ function pubStopRaw(id) {
       const { r, j } = await upstreamJSON(API + "?dato=" + id + "&func=0", { headers: UPSTREAM_HEADERS, cache: "no-store" });
       if (!r.ok) throw new Error("iTranvías " + r.status);
       const prev = lastGood.get(id) || shared;
-      const d = { at: Date.now(), lineas: withGhosts(prev, (j.buses && j.buses.lineas) || []) };
+      const at = Date.now();
+      let lineas = withGhosts(prev, (j.buses && j.buses.lineas) || []);
+      try { lineas = await assignSlots(id, at, lineas, prev); } catch (e) {}
+      const d = { at, lineas };
       lastGood.set(id, d);
       await stopCachePut(id, d);
       return d;
@@ -1554,20 +1557,28 @@ function pubStopRaw(id) {
 }
 
 // iTranvías solo lista los buses que está siguiendo: uno que espera en cabecera o pierde el
-// GPS desaparece unos minutos. Dos remedios:
+// GPS desaparece unos minutos. Tres remedios:
 // 1) withGhosts: si un bus visto en vivo desaparece cuando aún le faltaban > 2 min, se mantiene
-//    hasta 10 min con su hora estimada y sinSenal: true.
-// 2) fillFromSchedule: horas del horario (próximos 60 min) sin ningún bus en vivo cerca
-//    (de 3 min antes a 8 min después) se añaden con programado: true.
+//    hasta 10 min con su hora estimada y sinSenal: true. Guarda el número de coche (bus) y se
+//    quita en cuanto ese coche vuelve a salir en vivo (antes se quedaba si volvía con la hora
+//    cambiada en más de 3 min y el mismo bus salía dos veces: 20 en vivo 08:36 + ámbar 08:41).
+// 2) assignSlots: cada bus en vivo se asocia a una hora del horario (slot, minuto del día) y la
+//    conserva entre consultas por número de coche. Un bus que va adelantado o con retraso ya no
+//    deja «libre» su hora (14 en vivo 08:07 que era el de las 08:12 + «08:12 según horario»).
+// 3) fillFromSchedule: horas del horario (próximos 60 min) sin bus asociado (o, para buses sin
+//    slot, sin ningún bus de 3 min antes a 8 min después) se añaden con programado: true.
 var GHOST_MAX = 10 * 60e3;
 function withGhosts(prev, lineas) {
   if (!prev || !prev.lineas) return lineas;
   const now = Date.now();
   const gone = (now - prev.at) / 60000;
   const out = lineas.map((l) => ({ ...l, buses: (l.buses || []).slice() }));
+  const coches = new Set();
+  for (const l of out) for (const b of l.buses) if (b.bus != null) coches.add(String(b.bus));
   for (const pl of prev.lineas) {
     for (const b of pl.buses || []) {
       if (b.programado) continue;
+      if (b.bus != null && coches.has(String(b.bus))) continue; // ha vuelto: no es un fantasma
       const left = parseMin(b.tiempo) - gone;
       const lost = b.sinSenal ? b.desde : prev.at;
       if (left <= 2 || now - lost > GHOST_MAX) continue;
@@ -1575,11 +1586,59 @@ function withGhosts(prev, lineas) {
       const seen = l && l.buses.some((x) => Math.abs(parseMin(x.tiempo) - left) <= 3);
       if (seen) continue;
       if (!l) { l = { ...pl, buses: [] }; out.push(l); }
-      l.buses.push({ tiempo: Math.round(left), sinSenal: true, desde: lost });
+      const g = { tiempo: Math.round(left), sinSenal: true, desde: lost };
+      if (b.bus != null) g.bus = b.bus;
+      if (b.slot != null) g.slot = b.slot;
+      l.buses.push(g);
     }
   }
   for (const l of out) l.buses.sort((a, b) => parseMin(a.tiempo) - parseMin(b.tiempo));
   return out;
+}
+
+// Asocia cada bus (en vivo o sin señal) a una hora del horario de esa parada.
+// 1) Conserva la hora que ya tenía el mismo coche si aún cuadra (de SLOT_KEEP_EARLY antes a
+//    SLOT_KEEP_LATE después). 2) Los demás, en orden de llegada, a la hora libre más cercana entre
+//    SLOT_EARLY min antes y SLOT_LATE min después; adelantarse cuenta 1,5 veces más que
+//    retrasarse. Entran horas de hasta 20 min atrás para que un bus con retraso se quede con la
+//    suya y no con la siguiente.
+var SLOT_EARLY = 6, SLOT_LATE = 12, SLOT_KEEP_EARLY = 10, SLOT_KEEP_LATE = 20;
+async function assignSlots(id, at, lineas, prev) {
+  const t = madridNow(at);
+  const st = await gtfsStopTimes(id, t.date.replace(/-/g, ""));
+  if (!st) return lineas;
+  const before = new Map();
+  for (const l of (prev && prev.lineas) || []) {
+    for (const b of l.buses || []) if (b.bus != null && b.slot != null) before.set(l.linea + ":" + b.bus, b.slot);
+  }
+  return lineas.map((l) => {
+    const slots = (st.lines[l.linea] || []).filter((m) => m >= t.min - 20 && m <= t.min + 120);
+    const buses = (l.buses || []).map((b) => { const c = { ...b }; delete c.slot; return c; });
+    if (!slots.length) return { ...l, buses };
+    const free = new Set(slots);
+    const orig = new Map((l.buses || []).map((b, i) => [buses[i], b]));
+    const diff = (b, m) => t.min + parseMin(b.tiempo) - m; // > 0: con retraso
+    const cands = buses.filter((b) => !b.programado).sort((a, b) => parseMin(a.tiempo) - parseMin(b.tiempo));
+    for (const b of cands) {
+      const k = b.bus != null ? before.get(l.linea + ":" + b.bus) : b.sinSenal ? orig.get(b).slot : undefined;
+      const keep = k != null ? k : orig.get(b).slot;
+      if (keep == null || !free.has(keep)) continue;
+      const d = diff(b, keep);
+      if (d >= -SLOT_KEEP_EARLY && d <= SLOT_KEEP_LATE) { b.slot = keep; free.delete(keep); }
+    }
+    for (const b of cands) {
+      if (b.slot != null) continue;
+      let best = null, cost = Infinity;
+      for (const m of free) {
+        const d = diff(b, m);
+        if (d < -SLOT_EARLY || d > SLOT_LATE) continue;
+        const c = d >= 0 ? d : -d * 1.5;
+        if (c < cost) { cost = c; best = m; }
+      }
+      if (best != null) { b.slot = best; free.delete(best); }
+    }
+    return { ...l, buses };
+  });
 }
 
 async function fillFromSchedule(id, d) {
@@ -1593,9 +1652,13 @@ async function fillFromSchedule(id, d) {
     const slots = st.lines[lid].filter((m) => m - t.min >= 2 && m - t.min <= 60);
     if (!slots.length) continue;
     let l = lineas.find((x) => x.linea === Number(lid));
-    const live = l ? l.buses.map((b) => parseMin(b.tiempo)) : [];
+    const buses = l ? l.buses.filter((b) => !b.programado) : [];
+    const taken = new Set(buses.filter((b) => b.slot != null).map((b) => b.slot));
+    // Buses sin slot (dato guardado antes de assignSlots o parada sin GTFS): ventana de siempre.
+    const live = buses.filter((b) => b.slot == null).map((b) => parseMin(b.tiempo));
     const used = new Set();
     for (const m of slots) {
+      if (taken.has(m)) continue;
       const rel = m - t.min;
       const k = live.findIndex((x, i) => !used.has(i) && x >= rel - 3 && x <= rel + 8);
       if (k >= 0) { used.add(k); continue; }
