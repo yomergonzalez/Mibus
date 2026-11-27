@@ -56,3 +56,13 @@ test('20 que desaparece y vuelve con otra hora: no queda el fantasma', async () 
   const bs = await stop(w, [8, 3, 44], [{ linea: 2000, buses: [B(392, 33), B(417, 55)] }], 2000);
   assert.equal(bs.filter((b) => b.sinSenal).length, 0);
 });
+
+test('20 adelantado tras pasar el anterior: no se queda la hora ya servida ni sale otro «según horario»', async () => {
+  const w = await load();
+  await stop(w, [8, 3, 44], [{ linea: 2000, buses: [B(392, 33), B(417, 55)] }], 2000);   // 08:36 y 08:58
+  await stop(w, [8, 35], [{ linea: 2000, buses: [B(392, 1), B(417, 20)] }], 2000);
+  await stop(w, [8, 38], [{ linea: 2000, buses: [B(417, 10), B(392, 60)] }], 2000);       // 392 ya pasó: otra vuelta
+  const bs = await stop(w, [8, 47, 44], [{ linea: 2000, buses: [B(417, 0), B(396, 33), B(392, 55)] }], 2000);
+  assert.equal(bs.find((b) => b.bus === 417).slot, 8 * 60 + 58);
+  assert.ok(!horario(bs).includes(10) && !horario(bs).includes(11), 'no debe añadir 08:58 según horario');
+});
