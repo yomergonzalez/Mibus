@@ -26,8 +26,8 @@
   'use strict';
 
   const R = 6371000;
-  const CAMINO = 1.5;        // las calles no son línea recta (Google: 483 m en recta = 800 m por la calle)
-  const PASO = 70;           // metros por minuto andando (~4,2 km/h, con semáforos)
+  const CAMINO = 1.2;        // las calles no son línea recta (Google desde casa: 680 m en recta = 800 m por la calle)
+  const PASO = 72;           // metros por minuto andando (~4,3 km/h, con semáforos)
 
   function distM(a, b) {
     const rad = Math.PI / 180;

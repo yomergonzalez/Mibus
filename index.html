@@ -402,8 +402,8 @@ function margen() {
   try { const v = localStorage.getItem(margenKey()); if (v != null && Number(v) >= 0 && Number(v) <= 60) return Number(v); } catch (e) {}
   return MARGEN_SALIDA;
 }
-const ANDAR_M_MIN = 70;    // 4,2 km/h, con semáforos
-const RODEO = 1.5;         // la calle no va en línea recta (calibrado con Google, 27 nov)
+const ANDAR_M_MIN = 72;    // ~4,3 km/h, con semáforos (Google: 800 m en 11 min, 2,6 km en 36)
+const RODEO = 1.2;         // la calle no va en línea recta (Google desde casa: 680 m en recta = 800 m por la calle)
 let manual = false, byLoc = false, hiddenAt = 0, filt = null, manualFilt = false, nearId = null;
 // Trayectos guardados en el móvil: { trips: [{ id, origen:{nombre,pos}, destino:{nombre,pos}, ida:[…], vuelta:[…] }], cur, dir }
 // cfg es el trayecto abierto (sus ida/vuelta son las listas de paradas de siempre) y tab el sentido.

@@ -107,13 +107,25 @@ test('opcionesConTransbordo: un bus, cambio a pocos metros y otro bus (GTFS real
     meta: JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'gtfs', 'meta.json'), 'utf8')),
     routes: JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'gtfs', 'routes.json'), 'utf8')),
   });
-  const casa = [43.3606, -8.4162], marineda = [43.345977, -8.428935];
+  // Casa real (Google Maps, 27 nov), no el punto de prueba de más al este.
+  const casa = [43.36185, -8.41825], marineda = [43.345977, -8.428935];
   const o = real.opcionesConTransbordo(casa, marineda);
   assert.ok(o.length > 0);
   // El segundo bus siempre es el 11 (1100), el único que llega a Marineda, y nunca la misma línea dos veces.
   for (const x of o) { assert.equal(x.linea2, '1100'); assert.notEqual(x.linea, x.linea2); assert.ok(x.minCambio <= 5); }
-  // El 14 (1400) de Outeiro cambiando en Vioño al 11 de Av. de Arteixo está entre las opciones.
-  assert.ok(o.some((x) => x.linea === '1400' && /Vio/.test(x.baja.nombre) && /Arteixo/.test(x.sube2.nombre)), JSON.stringify(o.slice(0, 5).map((x) => [x.linea, x.baja.nombre, x.sube2.nombre])));
+  // El 12 (1200) de Nelle cambiando al 11 está entre las opciones. (Con el andar calibrado, 14/22 › 11 ya no
+  // compensan: desde Vioño se llega andando antes que esperando al 11, como dice Google.)
+  assert.ok(o.some((x) => x.linea === '1200' && /Nelle/.test(x.sube.nombre)), JSON.stringify(o.slice(0, 5).map((x) => [x.linea, x.baja.nombre, x.sube2.nombre])));
   // Ordenadas por tiempo total.
   for (let i = 1; i < o.length; i++) assert.ok(o[i - 1].total <= o[i].total);
+});
+
+test('andar calibrado con Google desde casa (27 nov): Pla y Cancela 11 min, Av. de Arteixo 105 ~14', () => {
+  const meta = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'gtfs', 'meta.json'), 'utf8'));
+  const casa = [43.36185, -8.41825];
+  const min = (id) => MiBusPlanner.minAndando(MiBusPlanner.distM(casa, meta.pos[id]));
+  assert.equal(min('251'), 11, 'Pla y Cancela, 38: Google dice 800 m y 11 min');
+  const arteixo = min('466');
+  assert.ok(arteixo >= 13 && arteixo <= 14, 'Av. de Arteixo, fronte ó 105: ' + arteixo);
+  assert.ok(min('94') <= 5, 'Rda. de Outeiro, 249: 5 min reales');
 });
