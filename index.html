@@ -109,9 +109,8 @@ h1.brand svg{flex:none;margin:-2px 0 -4px -3px}
 .toast{position:fixed;left:50%;bottom:max(18px,env(safe-area-inset-bottom));transform:translateX(-50%);background:#111114;color:#fff;border-radius:14px;padding:12px 16px;font-size:14px;z-index:40;max-width:calc(100% - 28px)}
 .toast[hidden]{display:none}
 .live{display:flex;align-items:center;gap:4px}
-.upd{font-size:13px;opacity:.92;font-variant-numeric:tabular-nums;white-space:nowrap}
-.upd::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:1px;background:#5be07a}
-.upd.old::before{background:#ffc04d}.upd.sched::before{background:rgba(255,255,255,.6)}
+.upd{font-size:13px;opacity:.7;font-variant-numeric:tabular-nums;white-space:nowrap}
+.upd.old{opacity:1;color:#ffc04d;font-weight:700}
 .live button{width:40px;height:40px;border:0;border-radius:12px;background:transparent;color:#fff;display:grid;place-items:center}
 main{max-width:640px;margin:0 auto;padding:10px 10px 14px;display:grid;gap:10px}
 .card{background:var(--card);border-radius:18px;padding:12px 14px 4px;box-shadow:0 1px 2px rgba(0,0,0,.05),0 6px 20px rgba(0,0,0,.05)}
@@ -152,6 +151,15 @@ main{max-width:640px;margin:0 auto;padding:10px 10px 14px;display:grid;gap:10px}
 .at b.sched::before{content:"🕒";font-style:normal;font-size:.75em;margin-right:4px}
 .hero{background:var(--card);border-radius:20px;padding:16px;display:grid;gap:12px;box-shadow:0 1px 2px rgba(0,0,0,.05),0 8px 24px rgba(0,0,0,.06)}
 .hero .lbl{font-size:12px;font-weight:800;color:var(--red);text-transform:uppercase;letter-spacing:.08em}
+.htop{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.st{display:inline-flex;align-items:center;gap:6px;flex:none;font-size:13px;font-weight:700;padding:4px 10px;border-radius:999px;white-space:nowrap}
+.st.live{background:light-dark(#e6f5eb,#12301d);color:light-dark(#14532d,#8fe0a9)}
+.st.old{background:light-dark(#fdf1dc,#3a2a08);color:light-dark(#7a4a00,#ffcf7a)}
+.st.sched{background:light-dark(#f1f1f4,#26262c);color:var(--mute);font-style:italic}
+.st.live::before,.st.old::before{content:"";width:8px;height:8px;border-radius:50%;background:#1a9f55;animation:pulse 2s ease-out infinite}
+.st.old::before{background:#d38b00;animation:none}
+.st.sched::before{content:"";width:13px;height:13px;background:currentColor;-webkit-mask:var(--clk) center/contain no-repeat;mask:var(--clk) center/contain no-repeat}
+@media (prefers-reduced-motion:reduce){.st.live::before{animation:none}}
 .hm{display:flex;align-items:center;gap:14px}
 .hero .chip{min-width:56px;height:46px;font-size:21px;border-radius:12px}
 .when{flex:1;display:grid}.when small{font-size:13px;color:var(--mute);font-weight:500}.when>span{font-size:12px;color:var(--mute)}
@@ -502,7 +510,8 @@ const ICON_TRASH = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" 
 // Fuente de cada hora: ● verde en vivo, ● ámbar dato viejo, 🕒 horario programado.
 function src(b) { return b.prog ? 'sched' : b.old ? 'old' : 'live'; }
 // Bajo la hora solo va el aviso de la fuente; los metros del bus no se muestran (confundían).
-function tag(b) { return b.prog ? '<span>según horario</span>' : b.ghost ? '<span>sin señal</span>' : ''; }
+// Estado del bus grande, en la esquina de la tarjeta.
+function badge(b) { const k = src(b); return '<span class="st ' + k + '">' + (k === 'sched' ? 'Horario programado' : k === 'old' ? 'Sin señal' : 'En vivo') + '</span>'; }
 function shortName(id) { return stopName(id).replace(/^(Rda\.|Av\.) de /, ''); }
 const ICON = {
   pin: '<svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10c0 5-5.5 10.2-7.4 11.8a1 1 0 0 1-1.2 0C9.5 20.2 4 15 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg>',
@@ -530,7 +539,7 @@ function goShort(b) {
   return '<span class="go ' + (s < 5 ? 'bad' : s < 10 ? 'warn' : 'ok') + '">' + (s <= 0 ? '¡sal ya!' : 'sal en ' + s + ' min') + '</span>';
 }
 function tchip(b) {
-  const why = b.prog ? '<span class="vh"> (según horario)</span>' : b.ghost ? '<span class="vh"> (sin señal)</span>' : '';
+  const why = b.prog ? '<span class="vh"> (horario programado)</span>' : b.ghost ? '<span class="vh"> (sin señal)</span>' : '';
   return '<span class="t ' + src(b) + '">' + (b.left <= 1 && !b.prog ? '<span class="now">Llegando</span>' : hhmm(b.at) + '<small>' + b.left + ' min</small>') + why + '</span>';
 }
 // Lista agrupada por parada: el «sal en» depende de la parada (lo que tardas andando), así que va una vez por parada
@@ -571,9 +580,9 @@ function renderList(stops) {
   let hero = '';
   if (first) {
     const li = lineInfo(first.linea);
-    hero = '<section class="hero"><div class="lbl">' + (fromPin ? 'Próximo en tu parada fijada' : hereOn && !first.miss ? 'Próximo al que llegas' : 'Próximo bus') + '</div>' +
+    hero = '<section class="hero"><div class="htop"><div class="lbl">' + (fromPin ? 'Próximo en tu parada fijada' : hereOn && !first.miss ? 'Próximo al que llegas' : 'Próximo bus') + '</div>' + badge(first) + '</div>' +
       '<div class="hm"><div class="chip" style="background:' + li.c + '">' + esc(li.n) + '</div>' +
-      '<div class="when"><small>Pasa a las</small><b class="big ' + src(first) + '">' + hhmm(first.at) + '</b>' + tag(first) + '</div>' +
+      '<div class="when"><small>Pasa a las</small><b class="big">' + hhmm(first.at) + '</b></div>' +
       (first.left <= 1 && !first.prog ? '<span class="in now">Llegando</span>' : '<span class="in">en ' + first.left + ' min</span>') + '</div>' +
       '<div class="stp">' + esc(stopName(first.stop)) + '</div>' +
       (then.length ? '<div class="then"><span>Luego</span>' + then.map(tchip).join('') + '</div>' : '') + leaveBox(first) + '</section>';
@@ -614,7 +623,7 @@ function renderList(stops) {
   const note = errs.length && errs.length < stops.length ? '<div class="err">Sin datos ahora de: ' + errs.map(esc).join(', ') + '</div>' : '';
   const empty = !all.length && !pending ? '<div class="card"><p class="sub">' + (errs.length === stops.length ? 'No se pudo conectar con iTranvías. Prueba a actualizar.' : 'Sin buses próximos ahora mismo.') + '</p></div>' : '';
   $('list').innerHTML = hero + note + empty + '<h2 class="gh">' + (stops.length > 1 ? 'Tus paradas' : 'Tu parada') + '</h2>' + groups.map(card).join('') + missHtml +
-    '<p class="legend"><span class="t live">en vivo</span><span class="t old">sin señal</span><span class="t sched">según horario</span></p>';
+    '<p class="legend"><span class="t live">en vivo</span><span class="t old">sin señal</span><span class="t sched">horario programado</span></p>';
 }
 
 function mins(v) { if (String(v).indexOf('<') >= 0) return 0; const n = parseFloat(String(v == null ? '' : v).replace(',', '.').replace(/[^0-9.]/g, '')); return isFinite(n) ? n : 0; }
@@ -689,8 +698,12 @@ function tick() {
     const s = Math.round((Date.now() - (ats.length ? Math.min.apply(null, ats) : lastAt)) / 1000);
     const prog = cfg[tab].some((x) => data[x.id] && data[x.id].prog);
     const err = cfg[tab].some((x) => data[x.id] && data[x.id].err);
-    $('upd').className = 'upd ' + (prog ? 'sched' : (err || s >= 180) ? 'old' : 'live');
-    $('upd').textContent = prog ? 'Horario programado' : (err || s >= 180) ? 'Último dato: hace ' + (s < 120 ? s + ' s' : Math.round(s / 60) + ' min') : 'En vivo · ' + (s < 5 ? 'ahora' : 'hace ' + s + ' s');
+    // El estado de cada bus va en su tarjeta; aquí solo si la app está recibiendo datos.
+    // Naranja a partir de 180 s (STALE_SHOW del Worker): con su caché de 60 s y el refresco de 30 s, 60–90 s es lo normal.
+    const age = s < 5 ? 'ahora' : 'hace ' + (s < 120 ? s + ' s' : Math.round(s / 60) + ' min');
+    $('upd').className = 'upd' + (prog || err || s >= 180 ? ' old' : '');
+    $('upd').textContent = prog ? 'Sin tiempo real' : age;
+    $('upd').setAttribute('aria-label', prog ? 'Sin datos en tiempo real' : 'Datos actualizados ' + age);
   }
 }
 
