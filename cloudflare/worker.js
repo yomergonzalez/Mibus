@@ -47,7 +47,7 @@ async function handle(req, env, ctx) {
       // el último dato bueno.
       try {
         const d = await pubStop(id);
-        return json({ parada: id, at: d.at, lineas: d.lineas, ...(d.stale ? { stale: true, edad_s: d.age } : {}), ...(d.programado ? { programado: true, tipo: d.tipo } : {}) });
+        return json({ parada: id, at: d.at, lineas: d.lineas, ...(d.via ? { via: d.via } : {}), ...(d.stale ? { stale: true, edad_s: d.age } : {}), ...(d.programado ? { programado: true, tipo: d.tipo } : {}) });
       } catch (e) {
         return json({ error: 'iTranvías no responde', detalle: String((e && e.message) || e) }, 502);
       }
@@ -1523,6 +1523,58 @@ var STALE_MAX = 15 * 60e3;
 var STALE_SHOW = 180;           // segundos
 var lastGood = new Map();
 
+// Llegadas en vivo de una parada: iTranvías desde el Worker y, si iTranvías bloquea la IP de
+// salida de Cloudflare (compartida: el 26 nov nos bloqueó sin pasarnos), por el relé.
+async function liveStopJSON(id) {
+  try {
+    const { r, j } = await upstreamJSON(API + "?dato=" + id + "&func=0", { headers: UPSTREAM_HEADERS, cache: "no-store" });
+    if (!r.ok) throw new Error("iTranvías " + r.status);
+    return { j };
+  } catch (e) {
+    // Sin cupo propio no se usa el relé: el presupuesto es nuestro límite, no el bloqueo.
+    if (/cupo agotado/.test(String(e && e.message))) throw e;
+    const j = await relayJSON("dato=" + id + "&func=0");
+    if (j && j.buses) return { j, via: "rele" };
+    throw e;
+  }
+}
+
+// ---------- Relé de respaldo (tools/relay-apps-script.gs) ----------
+// Un Google Apps Script que consulta iTranvías desde las IPs de Google. Solo llegadas (func=0)
+// y solo cuando el Worker está bloqueado (429 o pausa). Se activa con la variable RELAY_URL
+// (URL /exec del script, con ?k=<clave> si se le puso clave). Cupo propio, más bajo que el
+// del Worker: no es para gastar más, es para no quedarnos sin datos por culpa de otros.
+// Quitarlo cuando Tranvías dé acceso oficial.
+var RELAY_BUDGET = [["m", 60e3, 4], ["h", 3600e3, 120], ["d", 86400e3, 600]];
+var relayPause = 0;
+
+async function relayJSON(query) {
+  const base = ENV && ENV.RELAY_URL;
+  if (!base || Date.now() < relayPause) return null;
+  if (!(await budgetTake(RELAY_BUDGET, "rbudget"))) return null;
+  const url = base + (base.includes("?") ? "&" : "?") + query;
+  const t0 = Date.now();
+  const c = new AbortController();
+  const timer = setTimeout(() => c.abort(), 8000);
+  let r, text;
+  try {
+    r = await fetch(url, { signal: c.signal, redirect: "follow" });
+    text = await r.text();
+  } catch (e) {
+    noteUpstream("relay?" + query, null, String((e && e.message) || e), t0);
+    return null;
+  } finally { clearTimeout(timer); }
+  let j = null;
+  try { j = JSON.parse(text); } catch (e) {}
+  if (!r.ok || !j || !j.buses) {
+    noteUpstream("relay?" + query, r, text, t0);
+    // El relé también bloqueado (o caído): no insistir en 5 min.
+    if ((j && j.status === 429) || r.status === 429 || !r.ok) relayPause = Date.now() + 5 * 60e3;
+    return null;
+  }
+  return j;
+}
+
 // Lo que ven todos (Alexa, MCP, panel, web): tiempo real + huecos rellenados con el horario.
 async function pubStop(id) {
   const d = await pubStopRaw(id);
@@ -1535,13 +1587,12 @@ function pubStopRaw(id) {
     const shared = await stopCacheGet(id);
     if (shared && Date.now() - shared.at < PUB_STOP_TTL) return shared;
     try {
-      const { r, j } = await upstreamJSON(API + "?dato=" + id + "&func=0", { headers: UPSTREAM_HEADERS, cache: "no-store" });
-      if (!r.ok) throw new Error("iTranvías " + r.status);
+      const { j, via } = await liveStopJSON(id);
       const prev = lastGood.get(id) || shared;
       const at = Date.now();
       let lineas = withGhosts(prev, (j.buses && j.buses.lineas) || []);
       try { lineas = await assignSlots(id, at, lineas, prev); } catch (e) {}
-      const d = { at, lineas };
+      const d = via ? { at, lineas, via } : { at, lineas };
       lastGood.set(id, d);
       await stopCachePut(id, d);
       return d;
@@ -2097,21 +2148,19 @@ function upstreamSlot() {
 // no se llama a iTranvías y quien llama sirve el último dato bueno.
 var BUDGET = [["m", 60e3, 4], ["h", 3600e3, 190], ["d", 86400e3, 1950]];
 
-async function budgetTake() {
+async function budgetTake(table = BUDGET, prefix = "budget") {
   if (!(await stateReady())) return true;
   const now = Date.now();
-  const keys = BUDGET.map(([k, span]) => "budget:" + k + ":" + Math.floor(now / span));
+  const keys = table.map(([k, span]) => prefix + ":" + k + ":" + Math.floor(now / span));
   try {
     const rows = (await ENV.DB.prepare("SELECT k, v FROM state WHERE k IN (?, ?, ?)").bind(...keys).all()).results || [];
     const used = Object.fromEntries(rows.map((r) => [r.k, Number(r.v) || 0]));
-    if (keys.some((k, i) => (used[k] || 0) >= BUDGET[i][2])) return false;
+    if (keys.some((k, i) => (used[k] || 0) >= table[i][2])) return false;
     const up = "INSERT INTO state (k, v) VALUES (?, '1') ON CONFLICT(k) DO UPDATE SET v = CAST(v AS INTEGER) + 1";
     const stmts = keys.map((k) => ENV.DB.prepare(up).bind(k));
     // Limpieza de contadores viejos de vez en cuando
     if (Math.random() < 0.05) {
-      stmts.push(ENV.DB.prepare("DELETE FROM state WHERE k LIKE 'budget:m:%' AND k <> ?").bind(keys[0]));
-      stmts.push(ENV.DB.prepare("DELETE FROM state WHERE k LIKE 'budget:h:%' AND k <> ?").bind(keys[1]));
-      stmts.push(ENV.DB.prepare("DELETE FROM state WHERE k LIKE 'budget:d:%' AND k <> ?").bind(keys[2]));
+      table.forEach(([k], i) => stmts.push(ENV.DB.prepare("DELETE FROM state WHERE k LIKE ? AND k <> ?").bind(prefix + ":" + k + ":%", keys[i])));
     }
     await ENV.DB.batch(stmts);
     return true;

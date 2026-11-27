@@ -23,6 +23,12 @@ python3 tools/gtfs_build.py RUTA/AL/GTFS.zip
 
 Haz commit de `gtfs/` y súbelo a `main`.
 
+## Relé de respaldo (si iTranvías bloquea al Worker)
+
+iTranvías limita por IP y el Worker sale con una IP de Cloudflare compartida: a veces la bloquea aunque no nos pasemos. La web no puede consultar con la IP del móvil (el navegador lo impide por CORS), así que el respaldo es un relé con otra IP: `tools/relay-apps-script.gs`, un Google Apps Script gratuito. Las instrucciones están al principio del archivo; al final se guarda su URL como secreto `RELAY_URL` del Worker. Sin `RELAY_URL` no cambia nada.
+
+El Worker solo lo usa para llegadas (`func=0`) y solo mientras iTranvías le devuelve 429 o está en pausa; nunca para saltarse el presupuesto propio. Cupo del relé: 4/min, 120/h, 600/día (contadores `rbudget:*` en D1). `/api/stop` responde `"via": "rele"` cuando el dato llegó por ahí.
+
 ## Servidor MCP (Alexa+ y otros asistentes)
 
 El Worker expone un servidor [MCP](https://modelcontextprotocol.io) en `POST /mcp` (Streamable HTTP, sin estado) con cuatro herramientas que reutilizan la lógica de la skill:
