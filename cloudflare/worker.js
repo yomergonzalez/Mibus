@@ -2238,7 +2238,8 @@ async function upstreamJSON(url, opts) {
   const t0 = Date.now();
   let r, text;
   try {
-    r = await fetch(url, opts);
+    r = await viaOwnIP(url, opts);
+    if (!r) r = await fetch(url, opts);
     text = await r.text();
   } catch (e) {
     noteUpstream(url, null, String((e && e.message) || e), t0);
@@ -2261,6 +2262,27 @@ async function upstreamJSON(url, opts) {
   if (!r.ok || (/func=0/.test(url) && !(j && j.buses))) noteUpstream(url, r, text, t0);
   if (breaker.strikes) { breaker.strikes = 0; breaker.until = 0; await breakerSave(); }
   return { r, j };
+}
+
+// IP propia (26 nov): la IP de salida de Cloudflare es compartida y iTranvías la bloquea por el uso
+// de otros. Si existen los secrets ITR_PROXY (p. ej. http://1.2.3.4.sslip.io:8880) e ITR_KEY, se pide
+// a través del proxy del droplet (tools/itr-proxy.py). Si el proxy no responde, se llama directo.
+async function viaOwnIP(url, opts) {
+  if (!ENV || !ENV.ITR_PROXY || !ENV.ITR_KEY || url.indexOf(API) !== 0) return null;
+  try {
+    const r = await fetch(ENV.ITR_PROXY.replace(/\/+$/, '') + '/queryitr_v3.php' + url.slice(API.length), {
+      headers: { 'x-key': ENV.ITR_KEY, 'Accept': 'application/json' },
+      signal: AbortSignal.timeout(8000)
+    });
+    if (r.status === 403 || r.status === 502 || r.status === 504) {
+      UPSTREAM_ERR.length < 10 && UPSTREAM_ERR.push({ q: 'proxy ' + r.status, status: r.status, ms: 0, ct: null, server: 'itr-proxy', body: '' });
+      return null;
+    }
+    return r;
+  } catch (e) {
+    UPSTREAM_ERR.length < 10 && UPSTREAM_ERR.push({ q: 'proxy', status: 0, ms: 0, ct: null, server: 'itr-proxy', body: String((e && e.message) || e).slice(0, 300) });
+    return null;
+  }
 }
 
 function noteUpstream(url, r, body, t0) {
