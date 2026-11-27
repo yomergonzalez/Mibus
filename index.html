@@ -106,6 +106,7 @@ h1.brand svg{flex:none;margin:-2px 0 -4px -3px}
 .wbar .w{background:light-dark(#e6e6eb,#2c2c33);color:light-dark(#4a4a52,#c4c4cc)}
 .vopt{flex:1;min-width:0;display:grid;gap:2px}.vr{display:flex;align-items:center;gap:6px;min-width:0}.vr .lc{flex:none;max-width:none;flex-wrap:nowrap}.vr b{flex:1;min-width:0;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.vr em{flex:none;font-style:normal;font-weight:800}
 .vk{display:flex;align-items:center;gap:6px;margin-left:15px;padding:3px 0 3px 14px;border-left:3px dotted light-dark(#c9c9d1,#44444c);font-size:13px;color:var(--mute)}.vk svg{flex:none}
+.vk0{min-height:14px;padding:0}.wchip{flex:none;min-width:34px;height:26px;border-radius:7px;display:grid;place-items:center;background:light-dark(#e6e6eb,#33333a);color:light-dark(#4a4a52,#c4c4cc)}.wchip svg{width:16px;height:16px}
 .best{font-size:12px;font-weight:800;color:light-dark(#9e0c24,#ff9aa8);background:var(--soft);border-radius:999px;padding:3px 9px}
 .note{font-size:14px;color:var(--mute);margin:0}
 .wcard{background:var(--card);border-radius:16px;padding:12px 14px;display:grid;gap:10px}
@@ -1244,7 +1245,7 @@ function bestTag(out) {
   return tied.every((x) => a.minAndandoIni < x.best.minAndandoIni) ? 'Menos andar' : '';
 }
 // Con un cambio: una fila por parada de subida y segundo bus (p. ej. «14 12A › 11 · Rda. de Outeiro 219»).
-// Solo si no hay directo o si ganan al directo en tiempo o te ahorran andar (≥ 3 min). Como mucho 3.
+// Solo si no hay directo o si ganan al directo en tiempo o te ahorran andar (≥ 3 min, sin tardar más de 10 min más). Como mucho 3.
 // Si la primera gana al directo por 3 min o más, se marca ella en vez del directo.
 function viaGroups(list, dir, prev) {
   const g = [], idx = {};
@@ -1254,7 +1255,9 @@ function viaGroups(list, dir, prev) {
     const x = g[idx[k]]; if (x.lineas.indexOf(o.linea) < 0) x.lineas.push(o.linea);
   }
   const d = dir.list[0] && dir.list[0].best, seen = new Set();
-  const out = g.filter((x) => !d || x.best.total < d.total || x.best.minAndandoIni + x.best.minCambio + 3 <= d.minAndandoIni)
+  // Andar: al principio, en el cambio y al final (en la vuelta lo que se ahorra suele ser el final).
+  const pie = (o) => o.minAndandoIni + (o.minCambio || 0) + (o.minAndandoFin || 0);
+  const out = g.filter((x) => !d || x.best.total < d.total || (pie(x.best) + 3 <= pie(d) && x.best.total <= d.total + 10))
     .filter((x) => { const nueva = x.lineas.some((l) => !seen.has(l + '>' + x.best.linea2)); x.lineas.forEach((l) => seen.add(l + '>' + x.best.linea2)); return nueva; })
     .slice(0, 3);
   const sel = new Set();
@@ -1265,8 +1268,14 @@ function viaGroups(list, dir, prev) {
 }
 function wCompute() {
   const P = W.lib.P, r = { radioOrigenM: 600, radioDestinoM: 400, inclusoSiAndarEsMejor: !!W.anyway };
-  W.ida = stopGroups(P.opcionesDirectas(W.origen.pos, W.destino.pos, r), W.trip && W.trip.ida);
-  W.vta = stopGroups(P.opcionesDirectas(W.destino.pos, W.origen.pos, r), W.trip && W.trip.vuelta);
+  // Si no hay directo cerca, se mira hasta 1 km de tu origen (no del destino): «andando hasta el 11»
+  // (casa → Marineda, la parada del 11 está a 12–13 min a pie) también es una forma de ir y hay que poder compararla.
+  const dirs = (a, b, lejos) => {
+    const l = P.opcionesDirectas(a, b, r);
+    return l.length ? l : P.opcionesDirectas(a, b, Object.assign({}, r, lejos));
+  };
+  W.ida = stopGroups(dirs(W.origen.pos, W.destino.pos, { radioOrigenM: 1000 }), W.trip && W.trip.ida);
+  W.vta = stopGroups(dirs(W.destino.pos, W.origen.pos, { radioDestinoM: 1000 }), W.trip && W.trip.vuelta);
   W.ida.via = viaGroups(P.opcionesConTransbordo(W.origen.pos, W.destino.pos), W.ida, W.trip && W.trip.ida);
   W.vta.via = viaGroups(P.opcionesConTransbordo(W.destino.pos, W.origen.pos), W.vta, W.trip && W.trip.vuelta);
   W.opts = W.ida.list.concat(W.ida.via.list);
@@ -1404,6 +1413,17 @@ function wRender() {
           '<span class="vk">' + ICON_WALK + '<span>' + esc(cambio) + '</span></span>' +
           '<span class="vr">' + chipsOf([o.linea2]) + '<b>' + esc(short(o.sube2.nombre)) + '</b></span></span></button>';
       };
+      // Directo junto a opciones con cambio: también en dos filas, «🚶 N min a pie» y el bus, para que se vea que es andar + el bus.
+      const dcard = (dir, x) => {
+        const on = W[dir].sel.has(x.id), o = x.best;
+        const aria = o.minAndandoIni + ' min andando hasta ' + o.sube.nombre + ' y el ' + x.lineas.map((l) => (W.lib.meta.lines[l] || {}).n || lineInfo(Number(l)).n).join(' o el ') + ' directo' + (o.minAndandoFin ? ', y ' + o.minAndandoFin + ' min andando al bajar' : '');
+        return '<button class="opt" data-g="' + dir + '|' + esc(x.id) + '" aria-pressed="' + on + '" aria-description="' + esc(aria) + '"><span class="box">' + (on ? ICON_CHECK : '') + '</span><span class="vopt">' +
+          (o.minAndandoFin > o.minAndandoIni
+            ? '<span class="vr">' + chipsOf(x.lineas) + '<b>' + esc(short(x.nombre)) + '</b><em>' + o.total + ' min</em></span><span class="vk vk0"></span>' +
+              '<span class="vr"><span class="wchip">' + ICON_WALK + '</span><b>' + o.minAndandoFin + ' min a pie hasta ' + esc(dir === 'vta' ? (W.origen.nombre || 'Casa') : W.destino.nombre) + '</b></span>'
+            : '<span class="vr"><span class="wchip">' + ICON_WALK + '</span><b>' + o.minAndandoIni + ' min a pie</b><em>' + o.total + ' min</em></span><span class="vk vk0"></span>' +
+              '<span class="vr">' + chipsOf(x.lineas) + '<b>' + esc(short(x.nombre)) + '</b></span>') + '</span></button>';
+      };
       const n = nSel(W.ida), tab = W.tab === 'vta' ? 'vta' : 'ida', ori = esc(W.origen.nombre || 'Casa'), des = esc(W.destino.nombre);
       h += '<div class="wtabs" role="tablist" aria-label="Sentido">' +
         '<button role="tab" data-a="tab" data-t="ida" aria-selected="' + (tab === 'ida') + '">Ida</button>' +
@@ -1412,7 +1432,7 @@ function wRender() {
       if (tab === 'vta' && W.needVta && nOpts(W.vta) && !nSel(W.vta)) h += '<p class="note wwarn" role="alert">Elige al menos una parada para volver.</p>';
       const D = W[tab], hasVia = D.via && D.via.list.length;
       h += '<div role="tabpanel" style="display:grid;gap:10px">';
-      if (D.list.length) h += (hasVia ? '<div class="lab">Directo</div>' : '') + '<div class="optl">' + D.list.map((x) => card(tab, x)).join('') + '</div>';
+      if (D.list.length) h += (hasVia ? '<div class="lab">Directo</div>' : '') + '<div class="optl">' + D.list.map((x) => (hasVia ? dcard : card)(tab, x)).join('') + '</div>';
       if (hasVia) h += '<div class="lab">Con un cambio</div><div class="optl">' + D.via.list.map((x) => vcard(tab, x)).join('') + '</div>' +
         '<p class="note">El tiempo de las opciones con cambio cuenta lo que esperas de media al segundo bus. La espera real te la decimos en vivo.</p>';
       if (!nOpts(D)) h += '<p class="note">No hay bus de vuelta; la vuelta quedará vacía.</p>';
