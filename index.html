@@ -542,14 +542,18 @@ function leaveBox(b) {
   if (b.miss) return '<div class="leave bad">' + ICON.walk + '<span><b>No llegas andando</b><small>Es el próximo, pero no da tiempo</small></span></div>';
   if (b.walk === 0) return '<div class="leave ok">' + ICON.walk + '<span><b>Ya estás en la parada</b></span></div>';
   const s = b.left - b.walk;
-  return '<div class="leave ' + (s < 5 ? 'bad' : s < 10 ? 'warn' : 'ok') + '">' + ICON.walk + '<span><b>' + (s <= 0 ? '¡Sal ya!' : 'Sal en ' + s + ' min') + '</b><small>' + leaveWhy(b.walk) + '</small></span>' +
+  return '<div class="leave ' + (s < 5 ? 'bad' : s < 10 ? 'warn' : 'ok') + '">' + ICON.walk + '<span><b>' + (s <= 0 ? '¡Sal ya!' : 'Sal en ' + s + ' min') + '</b><small>' + leaveWhy(b.walk, b.left) + '</small></span>' +
     '<button class="mgch" data-a="mg" aria-haspopup="dialog" aria-label="Cambiar cuánto antes llegar a la parada">Cambiar</button></div>';
 }
 // «4 min andando · llegas 3 min antes del bus»: walk ya lleva el margen dentro.
-function leaveWhy(walk, m) {
-  if (m == null) m = margen();
+// Si ya no da tiempo a salir con todo el margen («¡Sal ya!»), cuenta lo que de verdad te queda saliendo ahora.
+function leaveWhy(walk, left) {
+  const m = margen(), real = Math.max(0, walk - m), s = left - walk;
   const nw = (t) => '<span style="white-space:nowrap">' + t + '</span>'; // que corte por el «·», no a media frase
-  return nw(Math.max(0, walk - margen()) + ' min andando ·') + ' ' + nw(m ? 'llegas ' + m + ' min antes del bus' : 'llegas justo');
+  const buf = left - real;
+  const why = s > 0 ? (m ? 'llegas ' + m + ' min antes del bus' : 'llegas justo')
+    : (buf > 0 ? 'si sales ya, llegas ' + buf + ' min antes' : 'si sales ya, llegas justo');
+  return nw(real + ' min andando ·') + ' ' + nw(why);
 }
 // «sal en X min» corto, en la cabecera de cada parada.
 function goShort(b) {
@@ -968,7 +972,7 @@ function renderMg() {
   const b = heroBus;
   if (b && b.walk && !b.miss) {
     const s = b.left - b.walk;
-    $('mgprev').innerHTML = '<div class="leave ' + (s < 5 ? 'bad' : s < 10 ? 'warn' : 'ok') + '">' + ICON.walk + '<span><small>Con el ' + esc(lineInfo(b.linea).n) + ' de las ' + hhmm(b.at) + '</small><b>' + (s <= 0 ? '¡Sal ya!' : 'Sal en ' + s + ' min') + '</b><small>' + leaveWhy(b.walk) + '</small></span></div>';
+    $('mgprev').innerHTML = '<div class="leave ' + (s < 5 ? 'bad' : s < 10 ? 'warn' : 'ok') + '">' + ICON.walk + '<span><small>Con el ' + esc(lineInfo(b.linea).n) + ' de las ' + hhmm(b.at) + '</small><b>' + (s <= 0 ? '¡Sal ya!' : 'Sal en ' + s + ' min') + '</b><small>' + leaveWhy(b.walk, b.left) + '</small></span></div>';
   } else $('mgprev').innerHTML = '';
   const n = names(cfg);
   $('mgnote').textContent = 'Para ' + n.from + ' → ' + n.to + '. ' + (tab === 'ida' ? 'La vuelta' : 'La ida') + ' tiene su propio ajuste.';
