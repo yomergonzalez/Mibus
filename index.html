@@ -33,10 +33,13 @@ h1{font-size:22px;line-height:1.05;margin:0;font-weight:800}
 h1.brand{display:flex;align-items:center;gap:7px;font:700 24px/1 'DM Sans',Figtree,system-ui,sans-serif;letter-spacing:-.03em}
 h1.brand svg{flex:none;margin:-2px 0 -4px -3px}
 .trip{display:flex;gap:8px;max-width:640px;margin:10px auto 0}
-.trip .cur{flex:1;min-height:52px;border:0;border-radius:12px;background:#fff;color:#111114;padding:6px 12px;display:flex;align-items:center;gap:8px;text-align:left;font:inherit}
-.trip .cur span{flex:1;min-width:0}
-.trip .cur b{display:block;font-size:16px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.trip .cur small{display:block;font-size:12px;color:#6e6e76}
+.dests{flex:1;display:flex;flex-direction:column;justify-content:flex-end;gap:4px}
+.dlab{font-size:12px;opacity:.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-left:2px}
+.drow{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 22px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 22px),transparent);padding-right:22px}.drow::-webkit-scrollbar{display:none}
+.dc{flex:none;display:flex;align-items:center;gap:4px;min-height:44px;max-width:220px;padding:0 14px;border:0;border-radius:22px;background:rgba(255,255,255,.14);color:#fff;font:700 15px Figtree,system-ui,sans-serif;white-space:nowrap}
+.dc span{overflow:hidden;text-overflow:ellipsis}.dc small{font-weight:500;opacity:.75;font-size:12px}
+.dc[aria-pressed=true]{background:#fff;color:#111114;font-weight:800;padding-right:10px}.dc[aria-pressed=true] small{opacity:.6}
+.dc.new{background:transparent;box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.45);font-weight:700}
 .trip .swap{width:72px;flex:none;border:0;border-radius:12px;background:rgba(255,255,255,.14);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;font:800 13px Figtree,system-ui,sans-serif}
 .sheet{position:fixed;inset:0;z-index:20;display:flex;flex-direction:column;justify-content:flex-end}
 .sheet[hidden]{display:none}
@@ -248,8 +251,7 @@ footer{color:var(--mute);font-size:13px;text-align:center;padding:0 16px 28px}
 <header>
   <div class="top"><h1 class="brand"><svg width="30" height="30" viewBox="10 10 80 80" aria-hidden="true"><rect x="45.5" y="60" width="9" height="24" rx="4.5" fill="#fff"/><circle cx="50" cy="40" r="22" fill="none" stroke="#fff" stroke-width="9"/><circle cx="50" cy="40" r="12.5" fill="none" stroke="#2bd47d" stroke-width="2.5" opacity=".45"/><circle cx="50" cy="40" r="7" fill="#2bd47d"/></svg>corunauta</h1><div class="live"><span id="upd" class="upd">Cargando…</span><button id="refresh" aria-label="Actualizar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg></button></div></div>
   <div class="trip">
-    <button class="cur" id="tripbtn" aria-haspopup="dialog"><span><b id="tripname">Casa → Trabajo</b><small id="triphint">Tu último trayecto</small></span>
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+    <div class="dests"><div class="dlab" id="dlab">Desde Casa a</div><div class="drow" id="drow" role="group" aria-labelledby="dlab"></div></div>
     <button class="swap" id="swap"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4v16M3 8l4-4 4 4M17 20V4M13 16l4 4 4-4"/></svg><span id="swaplbl">Volver</span></button>
   </div>
 </header>
@@ -421,18 +423,44 @@ function save() { store.cur = cfg.id; store.dir = tab; try { localStorage.setIte
 // Sin coordenadas guardadas (trayectos migrados), el centro de sus paradas.
 function endPos(t, which) { const e = t[which]; return (e && e.pos) || centre(which === 'origen' ? t.ida : t.vuelta); }
 function names(t, dir) { const a = t.origen.nombre, b = t.destino.nombre; return (dir || tab) === 'ida' ? { from: a, to: b } : { from: b, to: a }; }
+const CHEV = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
+// Destinos en chips: uno toca = cambia de destino; el abierto (con flecha) abre «Tus trayectos»; «＋ Nuevo» abre el asistente.
 function renderTrip() {
   const none = !store.trips.length;
   $('swap').disabled = none; $('editbtn').hidden = none;
-  if (none) { $('tripname').textContent = 'Sin trayectos'; $('triphint').textContent = 'Configura uno para empezar'; $('swaplbl').textContent = 'Volver'; $('plan').hidden = true; return; }
-  const n = names(cfg);
-  $('tripname').textContent = n.from + ' → ' + n.to;
-  $('triphint').textContent = (tab === 'ida' ? 'Ida' : 'Vuelta') + ' · ' + (byLoc && !manual ? 'cambiado porque estás cerca de ' + n.from : 'tu último trayecto');
+  if (none) {
+    $('dlab').textContent = 'Sin trayectos';
+    $('drow').innerHTML = '<button class="dc new" data-new="1">＋ Configura tu trayecto</button>';
+    $('swaplbl').textContent = 'Volver'; $('plan').hidden = true; return;
+  }
+  const n = names(cfg), home = cfg.origen.nombre;
+  $('dlab').textContent = tab === 'ida' ? 'Desde ' + home + ' a' : 'A ' + home + ' desde';
+  const key = store.trips.map((t) => t.id + t.origen.nombre + t.destino.nombre).join('|') + cfg.id;
+  if ($('drow').dataset.k !== key) {
+    $('drow').dataset.k = key;
+    $('drow').innerHTML = store.trips.map((t) => {
+      const on = t === cfg, other = t.origen.nombre !== home;
+      return '<button class="dc" data-dest="' + esc(t.id) + '" aria-pressed="' + on + '"' +
+        (on ? ' aria-haspopup="dialog" aria-label="' + esc(t.destino.nombre) + ', abierto. Ver tus trayectos"' : '') + '>' +
+        '<span>' + esc(t.destino.nombre) + (other ? ' <small>desde ' + esc(t.origen.nombre) + '</small>' : '') + '</span>' + (on ? CHEV : '') + '</button>';
+    }).join('') + '<button class="dc new" data-new="1" aria-label="Nuevo destino">＋ Nuevo</button>';
+    const cur = $('drow').querySelector('[aria-pressed=true]');
+    // Lo justo para que el abierto se vea entero (sin mover la fila si ya cabe).
+    const r = $('drow'); if (cur) r.scrollLeft = Math.max(0, cur.offsetLeft - r.offsetLeft + cur.offsetWidth - r.clientWidth + 24);
+  }
   $('swaplbl').textContent = tab === 'ida' ? 'Volver' : 'Ir';
   $('swap').setAttribute('aria-label', 'Cambiar a ' + n.to + ' → ' + n.from);
   // «¿Qué bus cojo?» usa el horario de tu trayecto original en el Worker: solo para ese.
   $('plan').hidden = cfg.id !== 't1';
 }
+$('drow').onclick = (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.new) { openWizard({ desde: store.trips.length ? cfg : null }); return; }
+  if (b.getAttribute('aria-pressed') === 'true') { openSheet(); return; }
+  // Al cambiar de destino se mantiene el sentido (si estabas en la vuelta, la vuelta del otro).
+  setTrip(b.dataset.dest, tab);
+  const again = $('drow').querySelector('[data-dest="' + b.dataset.dest + '"]'); if (again) again.focus();
+};
 function setTrip(id, dir) {
   const t = store.trips.find((x) => x.id === id); if (!t) return;
   cfg = t; tab = dir; manual = true; byLoc = false; filt = null; nearId = null;
@@ -685,7 +713,7 @@ function autoTab() {
       for (const s of cfg[t]) { const q = posOf(s.id); if (q) { const d = km(me, q); if (d < nd) { nd = d; near = s.id; } } }
       nearId = nd <= 0.2 ? near : null;
       const changed = t !== tab;
-      if (changed) { tab = t; filt = null; manualFilt = false; save(); }
+      if (changed) { tab = t; filt = null; manualFilt = false; save(); const n = names(cfg); toast('Te pongo la ' + (t === 'ida' ? 'ida' : 'vuelta') + ': estás cerca de ' + n.from); }
       if (!manualFilt) filt = nearId;
       render();
       if (changed) refresh(); else tick();
@@ -753,8 +781,7 @@ function openSheet() {
   $('sheet').hidden = false;
   const first = $('triplist').querySelector('[aria-pressed=true]'); if (first) first.focus();
 }
-function closeSheet() { $('sheet').hidden = true; $('tripbtn').focus(); }
-$('tripbtn').onclick = openSheet;
+function closeSheet() { $('sheet').hidden = true; const c = $('drow').querySelector('[aria-pressed=true]'); if (c) c.focus(); }
 $('scrim').onclick = closeSheet;
 $('sheet').addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSheet(); });
 $('triplist').onclick = (e) => {
@@ -1052,11 +1079,14 @@ function openWizard(o) {
     W.origen = { nombre: W.trip.origen.nombre, pos: endPos(W.trip, 'origen') };
     W.destino = { nombre: W.trip.destino.nombre, pos: endPos(W.trip, 'destino') };
     W.nombre = W.trip.destino.nombre; W.step = 3;
+  } else if (o.desde && endPos(o.desde, 'origen')) {
+    // «＋ Nuevo» desde los chips: sales del mismo sitio que el trayecto abierto; vamos directos a «¿a dónde vas?».
+    W.origen = { nombre: o.desde.origen.nombre, pos: endPos(o.desde, 'origen') }; W.step = 2;
   }
   $('wiz').hidden = false; document.body.style.overflow = 'hidden';
   wRender();
   wLoadLibs();
-  if (!W.trip) wLocate();
+  if (!W.trip && !W.origen) wLocate();
 }
 function wLoadLibs() {
   const w = W;
