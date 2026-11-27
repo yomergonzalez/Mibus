@@ -1597,17 +1597,22 @@ function withGhosts(prev, lineas) {
 }
 
 // Asocia cada bus (en vivo o sin señal) a una hora del horario de esa parada.
+// 0) Horas ya servidas (hechos): las de un coche que tenía esa hora y ya ha pasado (no está o
+//    vuelve en otra vuelta). No se vuelven a dar a otro bus (antes, el 20 de las 08:36 pasaba y su
+//    hora quedaba libre: el siguiente, que venía 11 min adelantado, se la quedaba y salía otro
+//    «08:58 según horario» de más). Se guardan 30 min en la línea (hechos: [minutos]).
 // 1) Conserva la hora que ya tenía el mismo coche si aún cuadra (de SLOT_KEEP_EARLY antes a
 //    SLOT_KEEP_LATE después). 2) Los demás, en orden de llegada, a la hora libre más cercana entre
 //    SLOT_EARLY min antes y SLOT_LATE min después; adelantarse cuenta 1,5 veces más que
 //    retrasarse. Entran horas de hasta 20 min atrás para que un bus con retraso se quede con la
 //    suya y no con la siguiente.
-var SLOT_EARLY = 6, SLOT_LATE = 12, SLOT_KEEP_EARLY = 10, SLOT_KEEP_LATE = 20;
+var SLOT_EARLY = 6, SLOT_LATE = 12, SLOT_KEEP_EARLY = 15, SLOT_KEEP_LATE = 20;
 async function assignSlots(id, at, lineas, prev) {
   const t = madridNow(at);
   const st = await gtfsStopTimes(id, t.date.replace(/-/g, ""));
   if (!st) return lineas;
   const before = new Map();
+  const prevL = new Map(((prev && prev.lineas) || []).map((l) => [l.linea, l]));
   for (const l of (prev && prev.lineas) || []) {
     for (const b of l.buses || []) if (b.bus != null && b.slot != null) before.set(l.linea + ":" + b.bus, b.slot);
   }
@@ -1615,9 +1620,19 @@ async function assignSlots(id, at, lineas, prev) {
     const slots = (st.lines[l.linea] || []).filter((m) => m >= t.min - 20 && m <= t.min + 120);
     const buses = (l.buses || []).map((b) => { const c = { ...b }; delete c.slot; return c; });
     if (!slots.length) return { ...l, buses };
-    const free = new Set(slots);
     const orig = new Map((l.buses || []).map((b, i) => [buses[i], b]));
     const diff = (b, m) => t.min + parseMin(b.tiempo) - m; // > 0: con retraso
+    const pl = prevL.get(l.linea);
+    const done = new Set(((pl && pl.hechos) || []).filter((m) => m >= t.min - 30));
+    const coche = new Map(buses.filter((b) => b.bus != null).map((b) => [String(b.bus), b]));
+    for (const pb of (pl && pl.buses) || []) {
+      if (pb.programado || pb.slot == null || pb.slot > t.min + 3) continue;
+      const nb = pb.bus != null ? coche.get(String(pb.bus)) : null;
+      if (nb && diff(nb, pb.slot) <= SLOT_KEEP_LATE) continue; // sigue llegando a esa hora
+      done.add(pb.slot);
+    }
+    const free = new Set(slots.filter((m) => !done.has(m)));
+    const hechos = done.size ? { hechos: [...done].sort((a, b) => a - b) } : {};
     const cands = buses.filter((b) => !b.programado).sort((a, b) => parseMin(a.tiempo) - parseMin(b.tiempo));
     for (const b of cands) {
       const k = b.bus != null ? before.get(l.linea + ":" + b.bus) : b.sinSenal ? orig.get(b).slot : undefined;
@@ -1637,7 +1652,7 @@ async function assignSlots(id, at, lineas, prev) {
       }
       if (best != null) { b.slot = best; free.delete(best); }
     }
-    return { ...l, buses };
+    return { ...l, buses, ...hechos };
   });
 }
 
@@ -1653,7 +1668,7 @@ async function fillFromSchedule(id, d) {
     if (!slots.length) continue;
     let l = lineas.find((x) => x.linea === Number(lid));
     const buses = l ? l.buses.filter((b) => !b.programado) : [];
-    const taken = new Set(buses.filter((b) => b.slot != null).map((b) => b.slot));
+    const taken = new Set(buses.filter((b) => b.slot != null).map((b) => b.slot).concat((l && l.hechos) || []));
     // Buses sin slot (dato guardado antes de assignSlots o parada sin GTFS): ventana de siempre.
     const live = buses.filter((b) => b.slot == null).map((b) => parseMin(b.tiempo));
     const used = new Set();
