@@ -122,9 +122,14 @@ main{max-width:640px;margin:0 auto;padding:10px 10px 14px;display:grid;gap:10px}
 .min small{font-size:12px;font-weight:700;margin-left:2px}
 .min.now{color:var(--red)}
 .mid{min-width:0}
-.pf{display:grid;grid-template-columns:auto 108px minmax(0,1fr) auto;gap:8px;align-items:center;margin:8px 0}
-.pf label{font-size:14px;font-weight:700}
-.mgf{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:2px 0 4px}.mgf label{font-size:15px;font-weight:700;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.mgf select{min-height:40px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:16px Figtree,system-ui,sans-serif;padding:0 8px}
+.pf{display:grid;grid-template-columns:108px minmax(0,1fr) auto;gap:8px;align-items:center;margin:8px 0}
+.pf label{font-size:14px;font-weight:700;grid-column:1/-1;margin-bottom:-2px}
+/* «Cambiar» cuánto antes llegar a la parada: junto al «Sal en» y bajo «¿Qué bus cojo?» */
+.mgch{flex:none;min-height:44px;padding:0 8px;margin:-6px -6px -6px auto;border:0;border-radius:10px;background:transparent;color:inherit;font:800 14px Figtree,system-ui,sans-serif;text-decoration:underline;text-underline-offset:3px}
+.mgline{display:flex;align-items:center;gap:8px;border-top:1px solid var(--line);margin-top:4px;padding-top:4px;font-size:13px;color:var(--mute)}.mgline .mgch{color:var(--red);margin:0 -8px 0 auto}
+.mgopts{display:flex;gap:8px;margin:6px 0 4px}.mgopts button{flex:1;min-width:0;min-height:48px;border-radius:12px;border:1.5px solid var(--line);background:var(--card);color:var(--ink);font:800 15px Figtree,system-ui,sans-serif;padding:0 4px}
+.mgopts button[aria-pressed=true]{background:var(--ink);color:var(--card);border-color:var(--ink)}
+#mgsheet .pane{gap:10px;padding-left:18px;padding-right:18px}#mgsheet .pane h2{margin:0;line-height:1.2}#mgsheet .sub{font-size:14px;margin:-4px 0 0}#mgsheet .note{font-size:12px}
 .pf input,.pf select{min-height:40px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:16px Figtree,system-ui,sans-serif;padding:0 8px}
 .pf button{min-height:40px;border:0;border-radius:10px;background:var(--red);color:#fff;font:700 14px Figtree,system-ui,sans-serif;padding:0 12px}
 @media(max-width:380px){.pf{grid-template-columns:1fr 1fr}.pf label{grid-column:1/-1}}
@@ -250,11 +255,6 @@ footer{color:var(--mute);font-size:13px;text-align:center;padding:0 16px 28px}
 </header>
 <main id="list"></main>
 <div class="tools">
-  <section class="card mg" id="mgc">
-    <div class="mgf"><label for="mg" id="mgl">Margen al salir</label>
-      <select id="mg"><option value="3">3 min</option><option value="5">5 min</option><option value="10">10 min</option><option value="15">15 min</option><option value="20">20 min</option></select></div>
-    <p class="sub">Ascensor, coger tus cosas y llegar antes a la parada por si el bus se adelanta. Se suma a lo que tardas andando en todos los «sal».</p>
-  </section>
   <section class="card" id="plan">
     <h2>¿Qué bus cojo?</h2>
     <div class="pf">
@@ -264,7 +264,8 @@ footer{color:var(--mute);font-size:13px;text-align:center;padding:0 16px 28px}
       <button id="pb">Calcular</button>
     </div>
     <div id="pr"></div>
-    <p class="sub">«Sal» incluye ir andando a la parada y tu margen; «llegada», lo que andas desde que bajas. Horario programado de iTranvías; puede variar con el tráfico.</p>
+    <div class="mgline"><span id="mgtxt">«Sal»: llegas a la parada 3 min antes del bus</span><button class="mgch" id="mgplan" aria-haspopup="dialog">Cambiar</button></div>
+    <p class="sub">«Llegada»: contando lo que andas desde que bajas. Horario programado de iTranvías; puede variar con el tráfico.</p>
   </section>
   <div class="add">
     <input id="q" type="search" placeholder="Añadir parada: calle, sitio o nombre" aria-label="Buscar parada por calle, sitio o nombre" autocomplete="off">
@@ -283,6 +284,18 @@ footer{color:var(--mute);font-size:13px;text-align:center;padding:0 16px 28px}
       <button class="act red" id="newtrip">+ Nuevo destino</button>
       <button class="act danger" id="deltrip">Borrar este trayecto</button>
     </div>
+  </div>
+</div>
+<div class="sheet" id="mgsheet" hidden>
+  <button class="scrim" id="mgscrim" aria-label="Cerrar"></button>
+  <div class="pane" role="dialog" aria-modal="true" aria-labelledby="mg-t">
+    <div class="grab"></div>
+    <h2 id="mg-t">¿Cuánto antes quieres llegar a la parada?</h2>
+    <p class="sub">Por si el bus se adelanta o tardas en salir. Lo sumamos a lo que tardas andando.</p>
+    <div class="mgopts" id="mgopts" role="group" aria-labelledby="mg-t"></div>
+    <div id="mgprev" aria-live="polite"></div>
+    <p class="note" id="mgnote"></p>
+    <button class="bigbtn" id="mgok">Listo</button>
   </div>
 </div>
 <div class="wiz" id="wiz" hidden role="dialog" aria-modal="true" aria-labelledby="wt">
@@ -363,6 +376,7 @@ let meta = { lines: {}, stops: {}, pos: {} };
 try { const c = JSON.parse(localStorage.getItem("mibus-meta2")); if (c && c.m && c.m.lines) meta = c.m; } catch (e) {}
 // Dónde estás (de autoTab), para el "sal en X min". Solo se usa si es reciente y precisa.
 let here = null, locDenied = false, missOpen = false;
+let heroBus = null, mgFrom = null; // bus de la tarjeta grande (para el ejemplo de la hoja) y botón que abrió la hoja
 const MARGEN_SALIDA = 3;   // margen por defecto, el mismo que el Worker (ascensor, portal…)
 // Cada uno elige su margen (en su móvil), por trayecto y sentido: salir de casa no es salir de un piso 7.
 function margenKey() { return 'mibus-margen-' + (cfg && cfg.id) + '-' + tab; }
@@ -410,7 +424,7 @@ function names(t, dir) { const a = t.origen.nombre, b = t.destino.nombre; return
 function renderTrip() {
   const none = !store.trips.length;
   $('swap').disabled = none; $('editbtn').hidden = none;
-  if (none) { $('tripname').textContent = 'Sin trayectos'; $('triphint').textContent = 'Configura uno para empezar'; $('swaplbl').textContent = 'Volver'; $('plan').hidden = true; $('mgc').hidden = true; return; }
+  if (none) { $('tripname').textContent = 'Sin trayectos'; $('triphint').textContent = 'Configura uno para empezar'; $('swaplbl').textContent = 'Volver'; $('plan').hidden = true; return; }
   const n = names(cfg);
   $('tripname').textContent = n.from + ' → ' + n.to;
   $('triphint').textContent = (tab === 'ida' ? 'Ida' : 'Vuelta') + ' · ' + (byLoc && !manual ? 'cambiado porque estás cerca de ' + n.from : 'tu último trayecto');
@@ -418,7 +432,6 @@ function renderTrip() {
   $('swap').setAttribute('aria-label', 'Cambiar a ' + n.to + ' → ' + n.from);
   // «¿Qué bus cojo?» usa el horario de tu trayecto original en el Worker: solo para ese.
   $('plan').hidden = cfg.id !== 't1';
-  $('mgc').hidden = false;
 }
 function setTrip(id, dir) {
   const t = store.trips.find((x) => x.id === id); if (!t) return;
@@ -529,7 +542,14 @@ function leaveBox(b) {
   if (b.miss) return '<div class="leave bad">' + ICON.walk + '<span><b>No llegas andando</b><small>Es el próximo, pero no da tiempo</small></span></div>';
   if (b.walk === 0) return '<div class="leave ok">' + ICON.walk + '<span><b>Ya estás en la parada</b></span></div>';
   const s = b.left - b.walk;
-  return '<div class="leave ' + (s < 5 ? 'bad' : s < 10 ? 'warn' : 'ok') + '">' + ICON.walk + '<span><b>' + (s <= 0 ? '¡Sal ya!' : 'Sal en ' + s + ' min') + '</b><small>Incluye ' + margen() + ' min de margen</small></span></div>';
+  return '<div class="leave ' + (s < 5 ? 'bad' : s < 10 ? 'warn' : 'ok') + '">' + ICON.walk + '<span><b>' + (s <= 0 ? '¡Sal ya!' : 'Sal en ' + s + ' min') + '</b><small>' + leaveWhy(b.walk) + '</small></span>' +
+    '<button class="mgch" data-a="mg" aria-haspopup="dialog" aria-label="Cambiar cuánto antes llegar a la parada">Cambiar</button></div>';
+}
+// «4 min andando · llegas 3 min antes del bus»: walk ya lleva el margen dentro.
+function leaveWhy(walk, m) {
+  if (m == null) m = margen();
+  const nw = (t) => '<span style="white-space:nowrap">' + t + '</span>'; // que corte por el «·», no a media frase
+  return nw(Math.max(0, walk - margen()) + ' min andando ·') + ' ' + nw(m ? 'llegas ' + m + ' min antes del bus' : 'llegas justo');
 }
 // «sal en X min» corto, en la cabecera de cada parada.
 function goShort(b) {
@@ -573,6 +593,7 @@ function renderList(stops) {
   const atPin = pinned == null ? [] : (favs.some((b) => b.stop === pinned) ? favs : all).filter((b) => b.stop === pinned && !b.miss);
   // Con ubicación, el grande es el primero al que llegas andando.
   const first = atPin[0] || favs.find((b) => !b.miss) || favs[0];
+  heroBus = first || null;
   const fromPin = !!atPin[0];
   // Después del grande, las siguientes de la misma línea en la misma parada.
   const then = first ? all.filter((b) => b !== first && !b.miss && b.linea === first.linea && b.stop === first.stop).slice(0, 3) : [];
@@ -769,6 +790,7 @@ $('list').onclick = (e) => {
   const b = e.target.closest('button'); if (!b) return;
   if (b.dataset.a === 'wizard') { openWizard({}); return; }
   if (b.dataset.a === 'loc') { locDenied = false; autoTab(); return; }
+  if (b.dataset.a === 'mg') { openMg(b); return; }
   if (b.dataset.pin) {
     const id = Number(b.dataset.pin);
     cfg.pin = cfg.pin || {};
@@ -934,18 +956,37 @@ $('res').onclick = (ev) => {
   render(); refresh();
   toast('Añadida: ' + stopName(id));
 };
+// Cuánto antes llegar a la parada (antes «margen al salir»): se cambia desde el «Sal en» o desde «¿Qué bus cojo?».
+const MG_OPTS = [0, 2, 3, 5, 10];
 function margenLabel() {
-  const v = margen(), sel = $('mg');
-  if (![...sel.options].some((o) => Number(o.value) === v)) sel.insertAdjacentHTML('beforeend', '<option value="' + v + '">' + v + ' min</option>');
-  sel.value = String(v);
-  try { $('mgl').textContent = 'Margen al salir de ' + names(cfg).from; } catch (e) { $('mgl').textContent = 'Margen al salir'; }
+  const m = margen();
+  $('mgtxt').textContent = m ? '«Sal»: llegas a la parada ' + m + ' min antes del bus' : '«Sal»: llegas a la parada justo cuando pasa';
 }
-$('mg').onchange = () => {
-  try { localStorage.setItem(margenKey(), $('mg').value); } catch (e) {}
-  render();
+function renderMg() {
+  const m = margen(), opts = MG_OPTS.includes(m) ? MG_OPTS : MG_OPTS.concat(m).sort((a, b) => a - b);
+  $('mgopts').innerHTML = opts.map((v) => '<button data-m="' + v + '" aria-pressed="' + (v === m) + '">' + (v ? v + ' min' : 'Justo') + '</button>').join('');
+  const b = heroBus;
+  if (b && b.walk && !b.miss) {
+    const s = b.left - b.walk;
+    $('mgprev').innerHTML = '<div class="leave ' + (s < 5 ? 'bad' : s < 10 ? 'warn' : 'ok') + '">' + ICON.walk + '<span><small>Con el ' + esc(lineInfo(b.linea).n) + ' de las ' + hhmm(b.at) + '</small><b>' + (s <= 0 ? '¡Sal ya!' : 'Sal en ' + s + ' min') + '</b><small>' + leaveWhy(b.walk) + '</small></span></div>';
+  } else $('mgprev').innerHTML = '';
+  const n = names(cfg);
+  $('mgnote').textContent = 'Para ' + n.from + ' → ' + n.to + '. ' + (tab === 'ida' ? 'La vuelta' : 'La ida') + ' tiene su propio ajuste.';
+}
+function openMg(from) { mgFrom = from || null; renderMg(); $('mgsheet').hidden = false; const on = $('mgopts').querySelector('[aria-pressed=true]'); if (on) on.focus(); }
+function closeMg() { $('mgsheet').hidden = true; const f = mgFrom && document.contains(mgFrom) ? mgFrom : $('list').querySelector('[data-a=mg]') || $('mgplan'); if (f) f.focus(); }
+$('mgopts').onclick = (e) => {
+  const b = e.target.closest('[data-m]'); if (!b) return;
+  try { localStorage.setItem(margenKey(), b.dataset.m); } catch (e) {}
+  render(); margenLabel(); renderMg();
+  const on = $('mgopts').querySelector('[aria-pressed=true]'); if (on) on.focus();
   if ($('pr').querySelector('.row')) runPlan();
 };
-function planLabel() { margenLabel(); $('pl').textContent = tab === 'ida' ? 'Llegar a las' : 'Salgo a las'; try { const v = localStorage.getItem('mibus-plan-' + tab); $('pt').value = v || (tab === 'ida' ? '10:00' : '22:00'); } catch (e) {} $('pr').innerHTML = ''; }
+$('mgplan').onclick = () => openMg($('mgplan'));
+$('mgok').onclick = closeMg;
+$('mgscrim').onclick = closeMg;
+$('mgsheet').addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMg(); });
+function planLabel() { margenLabel(); $('pl').textContent = tab === 'ida' ? 'Quiero llegar a las' : 'Quiero salir a las'; try { const v = localStorage.getItem('mibus-plan-' + tab); $('pt').value = v || (tab === 'ida' ? '10:00' : '22:00'); } catch (e) {} $('pr').innerHTML = ''; }
 const hm = (t) => { const [h, m] = String(t).split(':').map(Number); return h * 60 + m; };
 const hmTxt = (n) => { n = ((n % 1440) + 1440) % 1440; return String(Math.floor(n / 60)).padStart(2, '0') + ':' + String(n % 60).padStart(2, '0'); };
 async function runPlan() {
