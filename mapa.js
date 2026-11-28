@@ -74,7 +74,7 @@
   const iconoYo = () => L.divIcon({ className: 'mm-me', html: '<i></i>', iconSize: [22, 22], iconAnchor: [11, 11] });
 
   function crear(el, o) {
-    const map = L.map(el, { zoomControl: false, attributionControl: true, tap: false, maxZoom: 19 });
+    const map = L.map(el, { zoomControl: false, attributionControl: true, tap: false, maxZoom: 19, zoomSnap: 0.25 });
     map.attributionControl.setPrefix(false);
     fondo(map, el, !!(o && o.oscuro));
     let stop = null, me = null, acc = null, line = null, last = null, rutaAtrib = false;
@@ -128,8 +128,10 @@
   }
   const iconoInicio = (txt) => L.divIcon({ className: 'mm-me', html: '<i></i><b class="mm-lbl">' + esc(txt) + '</b>', iconSize: [22, 22], iconAnchor: [11, 11] });
 
+  // zoomSnap 0,25 (en los dos mapas): con saltos enteros, fitBounds se quedaba hasta un zoom entero
+  // por detrás de lo que cabe (paso 3 de Yomer, 28 nov: zoom 15 → 15,75 con las mismas paradas).
   function paradas(el, o) {
-    const map = L.map(el, { zoomControl: false, attributionControl: true, tap: false, maxZoom: 19, scrollWheelZoom: false });
+    const map = L.map(el, { zoomControl: false, attributionControl: true, tap: false, maxZoom: 19, zoomSnap: 0.25, scrollWheelZoom: false });
     map.attributionControl.setPrefix(false);
     fondo(map, el, !!(o && o.oscuro));
     const capa = L.layerGroup().addTo(map);
@@ -144,7 +146,7 @@
         if (k !== encuadre) {
           encuadre = k;
           const b = L.latLngBounds([d.inicio].concat(d.paradas.map((p) => p.pos)));
-          map.fitBounds(b, { paddingTopLeft: [30, 46], paddingBottomRight: [30, 40], maxZoom: 17 });
+          map.fitBounds(b, { paddingTopLeft: [20, 46], paddingBottomRight: [20, 40], maxZoom: 17 });
         }
       },
       tamano() { map.invalidateSize(); },
