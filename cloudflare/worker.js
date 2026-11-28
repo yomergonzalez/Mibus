@@ -77,6 +77,16 @@ async function handle(req, env, ctx) {
       }
     }
 
+    // Camino a pie hasta una parada para «Ver parada»: /api/ruta?id=50&lat=43.3618&lon=-8.4182
+    // Siempre 200: si no hay ruta real (sin clave, sin cupo, lejos o falla), { recta: true }
+    // y la web dibuja la línea recta.
+    if (url.pathname === '/api/ruta') {
+      const id = parseInt(url.searchParams.get('id'), 10);
+      const lat = parseFloat(url.searchParams.get('lat')), lon = parseFloat(url.searchParams.get('lon'));
+      if (!id || !isFinite(lat) || !isFinite(lon)) return json({ error: 'parámetros inválidos' }, 400);
+      return json(await rutaAPie(id, lat, lon));
+    }
+
     if (url.pathname === '/alexa' && req.method === 'POST') {
       const body = await req.clone().json().catch(() => null);
       ALEXA_TRACE = [];
@@ -137,7 +147,7 @@ async function handle(req, env, ctx) {
 
     // Archivos de la web (asistente, «Añadir parada», «Editar paradas»): el Worker los sirve
     // desde GitHub Pages en su propio dominio, para que la web los pida siempre a su mismo origen.
-    if (/^\/(planner\.js|buscador\.js|gtfs\/[a-z0-9_-]+(\/[a-z0-9_-]+)?\.json)$/i.test(url.pathname)) return serveStatic(url.pathname.slice(1));
+    if (/^\/(planner\.js|buscador\.js|mapa\.js|vendor\/leaflet\/leaflet\.(?:js|css)|gtfs\/[a-z0-9_-]+(\/[a-z0-9_-]+)?\.json)$/i.test(url.pathname)) return serveStatic(url.pathname.slice(1));
     // Logo: iconos de la app y la imagen para compartir (og.png).
     if (/^\/(og|favicon-32|apple-touch-icon|icon-192|icon-512|icon-maskable-512)\.png$/.test(url.pathname)) return serveStatic(url.pathname.slice(1));
 
@@ -146,7 +156,7 @@ async function handle(req, env, ctx) {
 
 async function serveStatic(path) {
   const png = /\.png$/.test(path);
-  const type = png ? 'image/png' : /\.js$/.test(path) ? 'text/javascript; charset=utf-8' : 'application/json; charset=utf-8';
+  const type = png ? 'image/png' : /\.js$/.test(path) ? 'text/javascript; charset=utf-8' : /\.css$/.test(path) ? 'text/css; charset=utf-8' : 'application/json; charset=utf-8';
   try {
     const body = await pubMemo('app:' + path, 10 * 60e3, async () => {
       const r = await fetch(APP_URL + path);
@@ -2352,6 +2362,69 @@ async function logMcp(env, req, reqText, res, trace) {
 // Photon permite buscar mientras se escribe; el servidor público es gratuito con uso razonable,
 // así que cada búsqueda se guarda una semana en la caché del Worker y el cliente espera a que
 // el usuario deje de escribir. Solo A Coruña y alrededores (donde llega el bus urbano).
+// ---------- Camino a pie hasta la parada («Ver parada», openrouteservice) ----------
+// Clave gratuita de openrouteservice en el Secret ORS_KEY (2000 rutas/día, 40/min). Nos
+// quedamos por debajo con presupuesto propio y la ruta se guarda 30 días por parada y
+// origen redondeado a ~50 m: casa → Nelle se pide una vez. Sin clave, sin cupo o si
+// falla, { recta: true } y la web dibuja la línea recta.
+const ORS = 'https://api.openrouteservice.org/v2/directions/foot-walking/geojson';
+const ORS_CUPO = [['m', 60e3, 35], ['d', 86400e3, 1800]];
+const RUTA_REJILLA = 0.0005; // ≈ 55 m de latitud, 40 m de longitud en A Coruña
+const RUTA_MAX_M = 2500;
+
+function metrosEntre(a, b) {
+  const dx = (a[1] - b[1]) * 111320 * Math.cos(a[0] * Math.PI / 180), dy = (a[0] - b[0]) * 110570;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+async function orsTake() {
+  if (!(await stateReady())) return true;
+  const now = Date.now();
+  const keys = ORS_CUPO.map(([k, span]) => 'ors:' + k + ':' + Math.floor(now / span));
+  try {
+    const rows = (await ENV.DB.prepare('SELECT k, v FROM state WHERE k IN (?, ?)').bind(...keys).all()).results || [];
+    const used = Object.fromEntries(rows.map((r) => [r.k, Number(r.v) || 0]));
+    if (keys.some((k, i) => (used[k] || 0) >= ORS_CUPO[i][2])) return false;
+    const up = "INSERT INTO state (k, v) VALUES (?, '1') ON CONFLICT(k) DO UPDATE SET v = CAST(v AS INTEGER) + 1";
+    const stmts = keys.map((k) => ENV.DB.prepare(up).bind(k));
+    if (Math.random() < 0.05) {
+      stmts.push(ENV.DB.prepare("DELETE FROM state WHERE k LIKE 'ors:m:%' AND k <> ?").bind(keys[0]));
+      stmts.push(ENV.DB.prepare("DELETE FROM state WHERE k LIKE 'ors:d:%' AND k <> ?").bind(keys[1]));
+    }
+    await ENV.DB.batch(stmts);
+    return true;
+  } catch (e) { return true; }
+}
+
+export async function rutaAPie(id, lat, lon) {
+  const meta = await gtfsJSON('meta.json').catch(() => null);
+  const to = meta && meta.pos && meta.pos[id];
+  if (!to) return { recta: true, motivo: 'parada sin posición' };
+  const r = (v) => Math.round(v / RUTA_REJILLA) * RUTA_REJILLA;
+  const from = [Number(r(lat).toFixed(4)), Number(r(lon).toFixed(4))];
+  const recta = Math.round(metrosEntre([lat, lon], to));
+  if (recta > RUTA_MAX_M) return { recta: true, m: recta, motivo: 'lejos' };
+  if (!ENV || !ENV.ORS_KEY) return { recta: true, m: recta, motivo: 'sin clave' };
+  try {
+    return await sharedCache('ruta:v1:' + id + ':' + from.join(','), 30 * 86400e3, async () => {
+      if (!(await orsTake())) throw new Error('cupo');
+      const res = await fetch(ORS, {
+        method: 'POST',
+        headers: { 'Authorization': ENV.ORS_KEY, 'Content-Type': 'application/json', 'Accept': 'application/geo+json' },
+        body: JSON.stringify({ coordinates: [[from[1], from[0]], [to[1], to[0]]], instructions: false }),
+      });
+      if (!res.ok) throw new Error('ORS ' + res.status);
+      const f = ((await res.json()).features || [])[0];
+      const c = f && f.geometry && f.geometry.coordinates;
+      if (!c || c.length < 2) throw new Error('ORS sin ruta');
+      const s = (f.properties && f.properties.summary) || {};
+      return { recta: false, m: Math.round(s.distance || 0), s: Math.round(s.duration || 0), linea: c.map((p) => [Number(p[1].toFixed(5)), Number(p[0].toFixed(5))]) };
+    });
+  } catch (e) {
+    return { recta: true, m: recta, motivo: String((e && e.message) || e) };
+  }
+}
+
 const PHOTON = 'https://photon.komoot.io/api/';
 const CORUNA_BBOX = [-8.48, 43.30, -8.35, 43.40]; // oeste, sur, este, norte
 
