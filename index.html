@@ -236,6 +236,9 @@ a.bigbtn{display:flex;align-items:center;justify-content:center;gap:10px;text-de
 #stnote{text-align:center;margin-top:-6px;font-size:13px}
 .mm-stop{background:none;border:0}.mm-stop svg{display:block;filter:drop-shadow(0 2px 3px rgba(0,0,0,.25))}
 .mm-chips{position:absolute;bottom:44px;left:50%;transform:translateX(-50%);display:flex;gap:3px}.mm-chips span{min-width:26px;height:18px;padding:0 4px;border-radius:5px;color:#fff;font:800 12px/18px Figtree,system-ui,sans-serif;text-align:center;box-shadow:0 0 0 2px #fff}
+.wmapw{position:relative;height:170px;border-radius:16px;overflow:hidden;background:light-dark(#eef0f2,#1f1f24)}.wmapw[hidden]{display:none}.wmap{position:absolute;inset:0}
+.wl{width:22px;height:22px;border-radius:50%;background:#6e6e76;color:#fff;font:800 12px/22px Figtree,system-ui,sans-serif;text-align:center;flex:none}.wl.on{background:var(--red)}
+.mm-lbl{position:absolute;left:50%;top:22px;transform:translateX(-50%);background:#fff;color:#1a56b8;border-radius:999px;padding:1px 7px;font:800 11px/16px Figtree,system-ui,sans-serif;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.2)}
 .mm-me{background:none;border:0}.mm-me i{display:block;width:16px;height:16px;margin:3px;border-radius:50%;background:#1a73e8;box-shadow:0 0 0 3px #fff,0 1px 4px rgba(0,0,0,.3)}
 .leave.nt{background:light-dark(#f3f3f6,#26262c);color:var(--ink)}.leave.nt small{color:var(--mute)}
 .smap.oscuro .leaflet-tile-pane{filter:invert(1) hue-rotate(180deg) brightness(.9) contrast(.9) saturate(.6)}
@@ -1349,7 +1352,7 @@ function wLoadLibs() {
   ensureLibs().then((l) => { if (W !== w) return; W.lib = l; if (W.libErr) W.err = ''; W.libErr = false; if (W.step === 3) wCompute(); wRender(); })
     .catch(() => { if (W !== w) return; W.libErr = true; W.err = 'No se pudieron cargar las paradas. Comprueba la conexión y vuelve a intentarlo.'; wRender(); });
 }
-function closeWizard() { W = null; $('wiz').hidden = true; document.body.style.overflow = ''; }
+function closeWizard() { if (W && W.map) W.map.destruir(); W = null; $('wiz').hidden = true; document.body.style.overflow = ''; }
 function toast(t, act) {
   const el = $('toast'); el.textContent = t; el.hidden = false; clearTimeout(toast.t);
   if (act) { const b = document.createElement('button'); b.textContent = act.label; b.onclick = () => { el.hidden = true; act.fn(); }; el.appendChild(b); }
@@ -1462,6 +1465,32 @@ function chosenStops(d) {
 }
 const nSel = (d) => d.sel.size + (d.via ? d.via.sel.size : 0);
 const nOpts = (d) => d.list.length + (d.via ? d.via.list.length : 0);
+// Paradas de subida de un sentido, en el orden de la lista (directas y luego con cambio), y cuáles están marcadas.
+function wLetras(d) {
+  const ids = [], on = new Set();
+  for (const x of d.list) { const id = String(x.id); if (ids.indexOf(id) < 0) ids.push(id); if (d.sel.has(x.id)) on.add(id); }
+  for (const x of (d.via ? d.via.list : [])) { const id = String(x.id); if (ids.indexOf(id) < 0) ids.push(id); if (d.via.sel.has(x.key)) on.add(id); }
+  return { ids, on };
+}
+// Mapa del paso 3: de dónde sales y las paradas con su letra. Un solo mapa que se recoloca en cada
+// wRender (se mueve su nodo al hueco nuevo), para no recrearlo al marcar o desmarcar.
+function wMap(tab) {
+  const ph = $('wmapw'), w = W; if (!ph || !w || !w.lib) return;
+  if (!w.mapEl) { w.mapEl = document.createElement('div'); w.mapEl.className = 'wmap'; }
+  ph.appendChild(w.mapEl);
+  const L2 = wLetras(w[tab]), pos = (id) => w.lib.meta.pos[id] || posOf(Number(id));
+  const d = {
+    inicio: tab === 'ida' ? w.origen.pos : w.destino.pos,
+    inicioTxt: tab === 'ida' ? (w.origen.nombre || 'Casa') : (w.nombre || w.destino.nombre),
+    paradas: L2.ids.map((id, i) => ({ pos: pos(id), letra: String.fromCharCode(65 + i), on: L2.on.has(id) })).filter((p) => p.pos),
+  };
+  if (!d.inicio) { ph.hidden = true; return; }
+  ensureMapa().then(() => {
+    if (W !== w || !document.contains(w.mapEl)) return;
+    if (!w.map) w.map = window.MiBusMapa.paradas(w.mapEl, { oscuro: matchMedia('(prefers-color-scheme: dark)').matches });
+    w.map.tamano(); w.map.pintar(d);
+  }).catch(() => { ph.hidden = true; });
+}
 function wSave() {
   const ida = chosenStops(W.ida);
   if (!ida.length) return;
@@ -1551,12 +1580,14 @@ function wRender() {
       const bar = (o) => '<span class="wbar" aria-hidden="true"><span class="w" style="flex:' + o.minAndandoIni + '">' + ICON_WALK + o.minAndandoIni + '</span>' +
         '<span style="flex:' + o.minBus + ';background:' + lineColor(o.linea) + '">' + ICON_BUS + o.minBus + ' min</span>' +
         (o.minAndandoFin ? '<span class="w" style="flex:' + o.minAndandoFin + '">' + ICON_WALK + o.minAndandoFin + ' min</span>' : '') + '</span>';
+      // Una letra por parada de subida (A, B…), en el orden en que salen: la misma en la opción y en el mapa.
+      const letra = (dir, id) => { const L2 = wLetras(W[dir]); const i = L2.ids.indexOf(String(id)); return i < 0 ? '' : '<span class="wl' + (L2.on.has(String(id)) ? ' on' : '') + '" aria-hidden="true">' + String.fromCharCode(65 + i) + '</span>'; };
       const card = (dir, x) => {
         const on = W[dir].sel.has(x.id), o = x.best, tag = x === W[dir].list[0] && W[dir].tag;
         const aria = o.minAndandoIni + ' min andando hasta la parada, ' + o.minBus + ' en bus' + (o.minAndandoFin ? ' y ' + o.minAndandoFin + ' andando' : '');
         return '<button class="opt" data-g="' + dir + '|' + esc(x.id) + '" aria-pressed="' + on + '" aria-description="' + esc(aria) + '"><span class="box">' + (on ? ICON_CHECK : '') + '</span><span>' +
-          (x.lineas.length > 2 ? '<span class="h">' + chipsOf(x.lineas) + '<em>' + o.total + ' min</em></span><b class="nm">' + esc(x.nombre) + '</b>'
-            : '<span class="h">' + chipsOf(x.lineas) + '<b>' + esc(x.nombre) + '</b><em>' + o.total + ' min</em></span>') + bar(o) +
+          (x.lineas.length > 2 ? '<span class="h">' + letra(dir, x.id) + chipsOf(x.lineas) + '<em>' + o.total + ' min</em></span><b class="nm">' + esc(x.nombre) + '</b>'
+            : '<span class="h">' + letra(dir, x.id) + chipsOf(x.lineas) + '<b>' + esc(x.nombre) + '</b><em>' + o.total + ' min</em></span>') + bar(o) +
           '<small>' + (tag ? '<span class="best">' + tag + '</span> ' : '') + 'Bajas en ' + esc(o.baja.nombre) + '</small></span></button>';
       };
       // Con un cambio, en dos filas como la tarjeta: 1.er bus y su parada, «N min a pie · cambias en…», 2.º bus y su parada.
@@ -1566,7 +1597,7 @@ function wRender() {
         const cambio = (o.minCambio ? o.minCambio + ' min a pie · ' : '') + 'cambias en ' + short(o.baja.nombre);
         const aria = o.minAndandoIni + ' min andando, ' + o.minBus + ' en bus, ' + cambio + ', unos ' + o.minEspera + ' min de espera, ' + o.minBus2 + ' en el ' + o.nombreLinea2 + ' desde ' + o.sube2.nombre;
         return '<button class="opt" data-g="' + dir + '|v:' + esc(x.key) + '" aria-pressed="' + on + '" aria-description="' + esc(aria) + '"><span class="box">' + (on ? ICON_CHECK : '') + '</span><span class="vopt">' +
-          '<span class="vr">' + chipsOf(x.lineas) + '<b>' + esc(short(x.nombre)) + '</b><em>' + o.total + ' min</em></span>' +
+          '<span class="vr">' + letra(dir, x.id) + chipsOf(x.lineas) + '<b>' + esc(short(x.nombre)) + '</b><em>' + o.total + ' min</em></span>' +
           '<span class="vk">' + ICON_WALK + '<span>' + esc(cambio) + '</span></span>' +
           '<span class="vr">' + chipsOf([o.linea2]) + '<b>' + esc(short(o.sube2.nombre)) + '</b></span></span></button>';
       };
@@ -1576,10 +1607,10 @@ function wRender() {
         const aria = o.minAndandoIni + ' min andando hasta ' + o.sube.nombre + ' y el ' + x.lineas.map((l) => (W.lib.meta.lines[l] || {}).n || lineInfo(Number(l)).n).join(' o el ') + ' directo' + (o.minAndandoFin ? ', y ' + o.minAndandoFin + ' min andando al bajar' : '');
         return '<button class="opt" data-g="' + dir + '|' + esc(x.id) + '" aria-pressed="' + on + '" aria-description="' + esc(aria) + '"><span class="box">' + (on ? ICON_CHECK : '') + '</span><span class="vopt">' +
           (o.minAndandoFin > o.minAndandoIni
-            ? '<span class="vr">' + chipsOf(x.lineas) + '<b>' + esc(short(x.nombre)) + '</b><em>' + o.total + ' min</em></span><span class="vk vk0"></span>' +
+            ? '<span class="vr">' + letra(dir, x.id) + chipsOf(x.lineas) + '<b>' + esc(short(x.nombre)) + '</b><em>' + o.total + ' min</em></span><span class="vk vk0"></span>' +
               '<span class="vr"><span class="wchip">' + ICON_WALK + '</span><b>' + o.minAndandoFin + ' min a pie hasta ' + esc(dir === 'vta' ? (W.origen.nombre || 'Casa') : W.destino.nombre) + '</b></span>'
             : '<span class="vr"><span class="wchip">' + ICON_WALK + '</span><b>' + o.minAndandoIni + ' min a pie</b><em>' + o.total + ' min</em></span><span class="vk vk0"></span>' +
-              '<span class="vr">' + chipsOf(x.lineas) + '<b>' + esc(short(x.nombre)) + '</b></span>') + '</span></button>';
+              '<span class="vr">' + letra(dir, x.id) + chipsOf(x.lineas) + '<b>' + esc(short(x.nombre)) + '</b></span>') + '</span></button>';
       };
       const n = nSel(W.ida), tab = W.tab === 'vta' ? 'vta' : 'ida', ori = esc(W.origen.nombre || 'Casa'), des = esc(W.destino.nombre);
       h += '<div class="wtabs" role="tablist" aria-label="Sentido">' +
@@ -1589,6 +1620,7 @@ function wRender() {
       if (tab === 'vta' && W.needVta && nOpts(W.vta) && !nSel(W.vta)) h += '<p class="note wwarn" role="alert">Elige al menos una parada para volver.</p>';
       const D = W[tab], hasVia = D.via && D.via.list.length;
       h += '<div role="tabpanel" style="display:grid;gap:10px">';
+      if (nOpts(D)) h += '<div class="wmapw" id="wmapw"></div>';
       if (D.list.length) h += (hasVia ? '<div class="lab">Directo</div>' : '') + '<div class="optl">' + D.list.map((x) => (hasVia ? dcard : card)(tab, x)).join('') + '</div>';
       if (hasVia) h += '<div class="lab">Con un cambio</div><div class="optl">' + D.via.list.map((x) => vcard(tab, x)).join('') + '</div>' +
         '<p class="note">El tiempo de las opciones con cambio cuenta lo que esperas de media al segundo bus. La espera real te la decimos en vivo.</p>';
@@ -1600,6 +1632,7 @@ function wRender() {
     }
   }
   $('wb').innerHTML = h;
+  if ($('wmapw')) wMap(W.tab === 'vta' ? 'vta' : 'ida');
   const q = $('wq');
   if (q) { q.oninput = () => { W.q = q.value; wSearch(); }; wSearch(); if (W.step === 2 || W.mode === 'type') q.focus(); }
   const nm = $('wname'); if (nm) nm.oninput = () => { W.nombre = nm.value; };

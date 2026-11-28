@@ -74,5 +74,43 @@
     };
   }
 
-  window.MiBusMapa = { crear };
+  // Paso 3 del asistente: de dónde sales y una letra por parada de subida (roja si está marcada).
+  //   const m = MiBusMapa.paradas(div, { oscuro });
+  //   m.pintar({ inicio: [lat, lon], inicioTxt: 'Casa', paradas: [{ pos: [lat, lon], letra: 'A', on: true }] });
+  function iconoLetra(letra, on) {
+    return L.divIcon({
+      className: 'mm-stop',
+      html: '<svg width="28" height="35" viewBox="0 0 28 35" aria-hidden="true"><path d="M14 34C14 33 2 23 2 13a12 12 0 0 1 24 0c0 10-12 20-12 21z" fill="' + (on ? '#c8102e' : '#6e6e76') + '" stroke="#fff" stroke-width="2.5"/>' +
+        '<text x="14" y="17.5" text-anchor="middle" font-family="Figtree, system-ui, sans-serif" font-size="13" font-weight="800" fill="#fff">' + esc(letra) + '</text></svg>',
+      iconSize: [28, 35], iconAnchor: [14, 34],
+    });
+  }
+  const iconoInicio = (txt) => L.divIcon({ className: 'mm-me', html: '<i></i><b class="mm-lbl">' + esc(txt) + '</b>', iconSize: [22, 22], iconAnchor: [11, 11] });
+
+  function paradas(el, o) {
+    const map = L.map(el, { zoomControl: false, attributionControl: true, tap: false, scrollWheelZoom: false });
+    map.attributionControl.setPrefix(false);
+    el.classList.toggle('oscuro', !!(o && o.oscuro));
+    L.tileLayer(TESELAS, { maxZoom: 19, attribution: ATRIB }).addTo(map);
+    const capa = L.layerGroup().addTo(map);
+    let encuadre = '';
+    return {
+      pintar(d) {
+        capa.clearLayers();
+        L.marker(d.inicio, { icon: iconoInicio(d.inicioTxt || ''), keyboard: false, interactive: false }).addTo(capa);
+        for (const p of d.paradas) L.marker(p.pos, { icon: iconoLetra(p.letra, p.on), keyboard: false, interactive: false, zIndexOffset: p.on ? 1000 : 0 }).addTo(capa);
+        // Solo se reencuadra si cambian los puntos (al marcar o desmarcar, el mapa se queda donde está).
+        const k = JSON.stringify([d.inicio].concat(d.paradas.map((p) => p.pos)));
+        if (k !== encuadre) {
+          encuadre = k;
+          const b = L.latLngBounds([d.inicio].concat(d.paradas.map((p) => p.pos)));
+          map.fitBounds(b, { paddingTopLeft: [30, 46], paddingBottomRight: [30, 24], maxZoom: 17 });
+        }
+      },
+      tamano() { map.invalidateSize(); },
+      destruir() { map.remove(); },
+    };
+  }
+
+  window.MiBusMapa = { crear, paradas };
 })();
