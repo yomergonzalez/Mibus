@@ -2413,7 +2413,12 @@ export async function rutaAPie(id, lat, lon) {
         headers: { 'Authorization': ENV.ORS_KEY, 'Content-Type': 'application/json', 'Accept': 'application/geo+json' },
         body: JSON.stringify({ coordinates: [[from[1], from[0]], [to[1], to[0]]], instructions: false }),
       });
-      if (!res.ok) throw new Error('ORS ' + res.status);
+      if (!res.ok) {
+        // Se apunta en upstream_log (server='ors') para ver por qué falla sin tener que reproducirlo.
+        const body = await res.text().catch(() => '');
+        if (ENV.DB) await logUpstream(ENV, '/ors/foot-walking', [{ q: String(id), status: res.status, ms: null, ct: res.headers.get('content-type'), server: 'ors', body: body.slice(0, 300) }]);
+        throw new Error('ORS ' + res.status);
+      }
       const f = ((await res.json()).features || [])[0];
       const c = f && f.geometry && f.geometry.coordinates;
       if (!c || c.length < 2) throw new Error('ORS sin ruta');

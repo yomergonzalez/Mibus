@@ -1,6 +1,7 @@
 /*
  * «Ver parada»: el mapa de la hoja con la parada, dónde estás y el camino a pie.
  * Se carga solo al abrir la hoja (como planner.js), junto con Leaflet (vendor/leaflet/).
+ * Teselas de OpenStreetMap; en modo oscuro, invertidas con CSS.
  * index.html pone los textos y pide la ruta a /api/ruta; aquí solo se dibuja.
  *
  *   const m = MiBusMapa.crear(div, { oscuro: true });
@@ -11,12 +12,10 @@
 (function () {
   'use strict';
   const L = window.L;
-  // CARTO: claro (Voyager) y oscuro, con la atribución de OpenStreetMap y CARTO.
-  const TESELAS = {
-    claro: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-    oscuro: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-  };
-  const ATRIB = '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> · © <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>';
+  // Teselas de OpenStreetMap (con atribución; uso pequeño, como el nuestro). Las de CARTO salían
+  // con «API KEY REQUIRED» (28 nov 2026). En oscuro se invierten con CSS (.smap.oscuro).
+  const TESELAS = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+  const ATRIB = '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>';
   const ATRIB_RUTA = 'Ruta: <a href="https://openrouteservice.org" target="_blank" rel="noopener">openrouteservice</a>';
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const colorOk = (c) => (/^#[0-9a-f]{3,8}$/i.test(c || '') ? c : '#6e6e76');
@@ -35,7 +34,8 @@
   function crear(el, o) {
     const map = L.map(el, { zoomControl: false, attributionControl: true, tap: false });
     map.attributionControl.setPrefix(false);
-    L.tileLayer((o && o.oscuro) ? TESELAS.oscuro : TESELAS.claro, { maxZoom: 19, subdomains: 'abcd', attribution: ATRIB, detectRetina: true }).addTo(map);
+    el.classList.toggle('oscuro', !!(o && o.oscuro));
+    L.tileLayer(TESELAS, { maxZoom: 19, attribution: ATRIB }).addTo(map);
     let stop = null, me = null, acc = null, line = null, last = null, rutaAtrib = false;
 
     function pintar(d) {
