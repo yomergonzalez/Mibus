@@ -51,6 +51,7 @@ test('con ORS_KEY: ruta real (lat, lon) y la clave va en Authorization', async (
   assert.deepEqual(j.linea[j.linea.length - 1], [43.36245, -8.41677]); // Nelle 109
   assert.equal(ors.length, 1);
   assert.equal(ors[0].opts.headers.Authorization, 'k1');
+  assert.ok(ors[0].u.startsWith('https://api.heigit.org/openrouteservice/v2/directions/foot-walking'), 'dirección nueva de openrouteservice: ' + ors[0].u);
 });
 
 test('mismo sitio (dentro de ~50 m): sale de la caché, una sola llamada', async () => {

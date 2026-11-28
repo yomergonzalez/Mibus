@@ -2367,7 +2367,9 @@ async function logMcp(env, req, reqText, res, trace) {
 // quedamos por debajo con presupuesto propio y la ruta se guarda 30 días por parada y
 // origen redondeado a ~50 m: casa → Nelle se pide una vez. Sin clave, sin cupo o si
 // falla, { recta: true } y la web dibuja la línea recta.
-const ORS = 'https://api.openrouteservice.org/v2/directions/foot-walking/geojson';
+// Ojo: api.openrouteservice.org se apagó el 24 nov 2026 (responde 410 Gone); misma API y misma
+// clave en api.heigit.org/openrouteservice.
+const ORS = 'https://api.heigit.org/openrouteservice/v2/directions/foot-walking/geojson';
 const ORS_CUPO = [['m', 60e3, 35], ['d', 86400e3, 1800]];
 const RUTA_REJILLA = 0.0005; // ≈ 55 m de latitud, 40 m de longitud en A Coruña
 const RUTA_MAX_M = 2500;
@@ -2413,7 +2415,12 @@ export async function rutaAPie(id, lat, lon) {
         headers: { 'Authorization': ENV.ORS_KEY, 'Content-Type': 'application/json', 'Accept': 'application/geo+json' },
         body: JSON.stringify({ coordinates: [[from[1], from[0]], [to[1], to[0]]], instructions: false }),
       });
-      if (!res.ok) throw new Error('ORS ' + res.status);
+      if (!res.ok) {
+        // Se apunta en upstream_log (server='ors') para ver por qué falla sin tener que reproducirlo.
+        const body = await res.text().catch(() => '');
+        if (ENV.DB) await logUpstream(ENV, '/ors/foot-walking', [{ q: String(id), status: res.status, ms: null, ct: res.headers.get('content-type'), server: 'ors', body: body.slice(0, 300) }]);
+        throw new Error('ORS ' + res.status);
+      }
       const f = ((await res.json()).features || [])[0];
       const c = f && f.geometry && f.geometry.coordinates;
       if (!c || c.length < 2) throw new Error('ORS sin ruta');
