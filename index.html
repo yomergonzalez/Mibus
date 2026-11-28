@@ -241,7 +241,7 @@ a.bigbtn{display:flex;align-items:center;justify-content:center;gap:10px;text-de
 .mm-lbl{position:absolute;left:50%;top:22px;transform:translateX(-50%);background:#fff;color:#1a56b8;border-radius:999px;padding:1px 7px;font:800 11px/16px Figtree,system-ui,sans-serif;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.2)}
 .mm-me{background:none;border:0}.mm-me i{display:block;width:16px;height:16px;margin:3px;border-radius:50%;background:#1a73e8;box-shadow:0 0 0 3px #fff,0 1px 4px rgba(0,0,0,.3)}
 .leave.nt{background:light-dark(#f3f3f6,#26262c);color:var(--ink)}.leave.nt small{color:var(--mute)}
-.smap.oscuro .leaflet-tile-pane{filter:invert(1) hue-rotate(180deg) brightness(.9) contrast(.9) saturate(.6)}
+.smap.oscuro .leaflet-tile-pane,.wmap.oscuro .leaflet-tile-pane{filter:invert(1) hue-rotate(180deg) brightness(.9) contrast(.9) saturate(.6)}
 .smap.leaflet-container{font-family:Figtree,system-ui,sans-serif;background:light-dark(#eef0f2,#1f1f24)}.leaflet-control-attribution{font-size:10px}
 .then{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.then>span{font-size:13px;color:var(--mute);font-weight:600;margin-right:2px}
 .t.gone{opacity:.7}.t.gone::before{animation:none}
@@ -1183,13 +1183,17 @@ $('mgscrim').onclick = closeMg;
 $('mgsheet').addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMg(); });
 
 // ---------- «Ver parada»: hoja con el mapa, el camino a pie y «Cómo llegar» ----------
-// Leaflet y mapa.js se cargan al abrirla. El camino real lo da /api/ruta (openrouteservice en el
+// Leaflet, MapLibre y mapa.js se cargan al abrirla. El camino real lo da /api/ruta (openrouteservice en el
 // Worker, con caché); si no hay, línea recta. Se refresca con cada render (ubicación cada 20 s).
 let mapaLib = null;
 function ensureMapa() {
   if (!mapaLib) {
-    if (!document.getElementById('lfcss')) { const l = document.createElement('link'); l.id = 'lfcss'; l.rel = 'stylesheet'; l.href = PAGES + 'vendor/leaflet/leaflet.css'; document.head.appendChild(l); }
+    const css = (id, f) => { if (!document.getElementById(id)) { const l = document.createElement('link'); l.id = id; l.rel = 'stylesheet'; l.href = PAGES + f; document.head.appendChild(l); } };
+    css('lfcss', 'vendor/leaflet/leaflet.css'); css('mlcss', 'vendor/maplibre/maplibre-gl.css');
+    // MapLibre (fondo vectorial de OpenFreeMap) es opcional: si no carga, mapa.js usa las teselas de OSM.
     mapaLib = conLimite((window.L ? Promise.resolve() : loadScript(PAGES + 'vendor/leaflet/leaflet.js'))
+      .then(() => (window.maplibregl ? 0 : loadScript(PAGES + 'vendor/maplibre/maplibre-gl.js')).catch(() => 0))
+      .then(() => (!window.maplibregl || window.L.maplibreGL ? 0 : loadScript(PAGES + 'vendor/maplibre/leaflet-maplibre-gl.js')).catch(() => 0))
       .then(() => (window.MiBusMapa ? 0 : loadScript(PAGES + 'mapa.js'))), 15000)
       .catch((e) => { mapaLib = null; throw e; });
   }

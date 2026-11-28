@@ -1,7 +1,9 @@
 /*
  * «Ver parada»: el mapa de la hoja con la parada, dónde estás y el camino a pie.
- * Se carga solo al abrir la hoja (como planner.js), junto con Leaflet (vendor/leaflet/).
- * Teselas de OpenStreetMap; en modo oscuro, invertidas con CSS.
+ * Se carga solo al abrir la hoja (como planner.js), junto con Leaflet (vendor/leaflet/) y MapLibre
+ * (vendor/maplibre/). Fondo: teselas vectoriales de OpenFreeMap (Positron en claro, Dark en oscuro),
+ * sin clave ni límite. Si no hay WebGL, no cargó MapLibre o el estilo falla, teselas de OpenStreetMap
+ * (en oscuro, invertidas con CSS): nunca sin mapa.
  * index.html pone los textos y pide la ruta a /api/ruta; aquí solo se dibuja.
  *
  *   const m = MiBusMapa.crear(div, { oscuro: true });
@@ -12,10 +14,50 @@
 (function () {
   'use strict';
   const L = window.L;
-  // Teselas de OpenStreetMap (con atribución; uso pequeño, como el nuestro). Las de CARTO salían
-  // con «API KEY REQUIRED» (28 nov 2026). En oscuro se invierten con CSS (.smap.oscuro).
+  // Fondo vectorial de OpenFreeMap (28 nov 2026): más limpio que el estándar de OSM y con oscuro de verdad.
+  const ESTILO = { claro: 'https://tiles.openfreemap.org/styles/positron', oscuro: 'https://tiles.openfreemap.org/styles/dark' };
+  const A = (h, t) => '<a href="' + h + '" target="_blank" rel="noopener">' + t + '</a>';
+  const ATRIB_OFM = A('https://openfreemap.org', 'OpenFreeMap') + ' © ' + A('https://www.openmaptiles.org/', 'OpenMapTiles') + ' © ' + A('https://www.openstreetmap.org/copyright', 'OpenStreetMap');
+  // Respaldo: teselas de OpenStreetMap (con atribución; uso pequeño). Las de CARTO salían con
+  // «API KEY REQUIRED» (28 nov 2026). En oscuro se invierten con CSS (.smap.oscuro).
   const TESELAS = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
-  const ATRIB = '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>';
+  const ATRIB = '© ' + A('https://www.openstreetmap.org/copyright', 'OpenStreetMap');
+  const ESPERA_ESTILO = 8000; // si el fondo vectorial no ha cargado en 8 s, se pasa al de OSM
+
+  function conWebGL() {
+    try { const c = document.createElement('canvas'); return !!(c.getContext('webgl2') || c.getContext('webgl')); } catch (e) { return false; }
+  }
+
+  // Pone el fondo del mapa: vectorial si se puede; si no (o si falla antes de cargar), raster de OSM.
+  function fondo(map, el, oscuro) {
+    let vivo = true, raster = false;
+    map.once('unload', () => { vivo = false; });
+    const aRaster = () => {
+      if (!vivo || raster) return;
+      raster = true;
+      el.classList.toggle('oscuro', oscuro);
+      L.tileLayer(TESELAS, { maxZoom: 19, attribution: ATRIB }).addTo(map);
+    };
+    if (!(L.maplibreGL && window.maplibregl && conWebGL())) { aRaster(); return; }
+    el.classList.remove('oscuro'); // el filtro de .oscuro es para el raster: no tocar el vectorial
+    el.classList.add('vector');
+    const capa = L.maplibreGL({ style: oscuro ? ESTILO.oscuro : ESTILO.claro, attributionControl: { customAttribution: ATRIB_OFM } });
+    // El mapa de MapLibre se crea en onAdd, que Leaflet retrasa hasta el primer setView/fitBounds.
+    capa.once('add', () => {
+      const gl = capa.getMaplibreMap();
+      let listo = false;
+      const caer = () => {
+        if (listo || !vivo || raster) return;
+        try { map.removeLayer(capa); } catch (e) { /* ya quitada */ }
+        el.classList.remove('vector');
+        aRaster();
+      };
+      gl.once('load', () => { listo = true; });
+      gl.on('error', () => caer()); // antes de «load»: estilo caído o sin red. Después, se ignoran (una tesela suelta)
+      setTimeout(caer, ESPERA_ESTILO);
+    });
+    capa.addTo(map);
+  }
   const ATRIB_RUTA = 'Ruta: <a href="https://openrouteservice.org" target="_blank" rel="noopener">openrouteservice</a>';
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const colorOk = (c) => (/^#[0-9a-f]{3,8}$/i.test(c || '') ? c : '#6e6e76');
@@ -32,10 +74,9 @@
   const iconoYo = () => L.divIcon({ className: 'mm-me', html: '<i></i>', iconSize: [22, 22], iconAnchor: [11, 11] });
 
   function crear(el, o) {
-    const map = L.map(el, { zoomControl: false, attributionControl: true, tap: false });
+    const map = L.map(el, { zoomControl: false, attributionControl: true, tap: false, maxZoom: 19 });
     map.attributionControl.setPrefix(false);
-    el.classList.toggle('oscuro', !!(o && o.oscuro));
-    L.tileLayer(TESELAS, { maxZoom: 19, attribution: ATRIB }).addTo(map);
+    fondo(map, el, !!(o && o.oscuro));
     let stop = null, me = null, acc = null, line = null, last = null, rutaAtrib = false;
 
     function pintar(d) {
@@ -88,10 +129,9 @@
   const iconoInicio = (txt) => L.divIcon({ className: 'mm-me', html: '<i></i><b class="mm-lbl">' + esc(txt) + '</b>', iconSize: [22, 22], iconAnchor: [11, 11] });
 
   function paradas(el, o) {
-    const map = L.map(el, { zoomControl: false, attributionControl: true, tap: false, scrollWheelZoom: false });
+    const map = L.map(el, { zoomControl: false, attributionControl: true, tap: false, maxZoom: 19, scrollWheelZoom: false });
     map.attributionControl.setPrefix(false);
-    el.classList.toggle('oscuro', !!(o && o.oscuro));
-    L.tileLayer(TESELAS, { maxZoom: 19, attribution: ATRIB }).addTo(map);
+    fondo(map, el, !!(o && o.oscuro));
     const capa = L.layerGroup().addTo(map);
     let encuadre = '';
     return {
@@ -104,7 +144,7 @@
         if (k !== encuadre) {
           encuadre = k;
           const b = L.latLngBounds([d.inicio].concat(d.paradas.map((p) => p.pos)));
-          map.fitBounds(b, { paddingTopLeft: [30, 46], paddingBottomRight: [30, 24], maxZoom: 17 });
+          map.fitBounds(b, { paddingTopLeft: [30, 46], paddingBottomRight: [30, 40], maxZoom: 17 });
         }
       },
       tamano() { map.invalidateSize(); },
