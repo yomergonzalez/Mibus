@@ -214,6 +214,31 @@ main{max-width:640px;margin:0 auto;padding:10px 10px 14px;display:grid;gap:10px}
 .pinb{flex:none;width:44px;height:44px;margin:-10px -10px -10px -2px;border:0;border-radius:12px;background:transparent;color:var(--mute);display:grid;place-items:center}
 .pinb[aria-pressed=true]{color:var(--red)}.pinb[aria-pressed=true] svg{fill:currentColor}
 .stop.pinned{box-shadow:0 0 0 2px var(--red)}
+/* «Ver parada»: la parada se toca (tarjeta grande y cabecera de cada parada) y abre la hoja con el mapa */
+.stpb{display:flex;align-items:center;gap:10px;min-height:48px;margin:-4px -6px;padding:4px 6px;border:0;border-radius:12px;background:transparent;color:var(--ink);font:inherit;text-align:left;width:calc(100% + 12px)}
+.stpb .pi{width:32px;height:32px;border-radius:10px;background:var(--soft);color:var(--red);display:grid;place-items:center;flex:none}.stpb .pi .ic{width:18px;height:18px}
+.stpb>span:nth-child(2){flex:1;min-width:0}.stpb b{display:block;font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.stpb small{display:block;font-size:13px;color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stpb .vp{flex:none;display:flex;align-items:center;gap:2px;font-size:14px;font-weight:800;color:var(--red);white-space:nowrap}
+.stopb{flex:1;min-width:0;display:flex;align-items:center;gap:8px;min-height:44px;margin:-11px 0 -11px -14px;padding:0 0 0 14px;border:0;background:transparent;color:inherit;font:inherit;text-align:left}
+.stopb .ic{color:var(--red)!important}.stopb .sc{flex:none;color:var(--mute);width:14px;height:14px}
+#stsheet .pane{gap:12px;padding-top:8px}#stsheet [hidden]{display:none!important}
+.smapw{position:relative;height:290px;max-height:42vh;border-radius:16px;overflow:hidden;background:light-dark(#eef0f2,#1f1f24)}
+.smap{position:absolute;inset:0}
+.srec{position:absolute;right:10px;top:10px;z-index:500;width:44px;height:44px;border:0;border-radius:12px;background:var(--card);color:var(--ink);display:grid;place-items:center;box-shadow:0 1px 4px rgba(0,0,0,.18)}
+.smsg{position:absolute;inset:0;display:grid;place-items:center;color:var(--mute);font-size:14px;text-align:center;padding:20px}
+.shd{display:flex;align-items:flex-start;gap:10px}.shd>div{flex:1;min-width:0}.shd h2{margin:0;font-size:22px;line-height:1.15}.shd .sub{font-size:14px;margin:2px 0 0}
+.shd .sx{flex:none;width:44px;height:44px;margin:-6px -8px 0 0;border:0;border-radius:12px;background:transparent;color:var(--mute);display:grid;place-items:center}
+.schips{display:flex;gap:6px;flex-wrap:wrap}.schips:empty{display:none}
+.schips span{display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 12px;border-radius:999px;background:light-dark(#f4f4f6,#26262c);font-size:14px;font-weight:700}.schips span b{font-weight:800}.schips .ic{width:16px;height:16px}
+#stleave .leave .chip{min-width:40px;height:30px;font-size:15px;border-radius:8px;flex:none}
+a.bigbtn{display:flex;align-items:center;justify-content:center;gap:10px;text-decoration:none}a.bigbtn .ic{width:20px;height:20px}
+.bigbtn.sec{background:light-dark(#f4f4f6,#26262c);color:var(--ink);font:800 17px Figtree,system-ui,sans-serif}
+#stnote{text-align:center;margin-top:-6px;font-size:13px}
+.mm-stop{background:none;border:0}.mm-stop svg{display:block;filter:drop-shadow(0 2px 3px rgba(0,0,0,.25))}
+.mm-chips{position:absolute;bottom:44px;left:50%;transform:translateX(-50%);display:flex;gap:3px}.mm-chips span{min-width:26px;height:18px;padding:0 4px;border-radius:5px;color:#fff;font:800 12px/18px Figtree,system-ui,sans-serif;text-align:center;box-shadow:0 0 0 2px #fff}
+.mm-me{background:none;border:0}.mm-me i{display:block;width:16px;height:16px;margin:3px;border-radius:50%;background:#1a73e8;box-shadow:0 0 0 3px #fff,0 1px 4px rgba(0,0,0,.3)}
+.leave.nt{background:light-dark(#f3f3f6,#26262c);color:var(--ink)}.leave.nt small{color:var(--mute)}
+.smap.leaflet-container{font-family:Figtree,system-ui,sans-serif;background:light-dark(#eef0f2,#1f1f24)}.leaflet-control-attribution{font-size:10px}
 .then{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.then>span{font-size:13px;color:var(--mute);font-weight:600;margin-right:2px}
 .t.gone{opacity:.7}.t.gone::before{animation:none}
 .none{padding:12px 14px;color:var(--mute);font-size:14px;border-top:1px solid var(--line)}.none.err{color:var(--red)}
@@ -317,6 +342,21 @@ footer{color:var(--mute);font-size:13px;text-align:center;padding:0 16px 28px}
     <button class="bigbtn" id="mgok">Listo</button>
   </div>
 </div>
+<div class="sheet" id="stsheet" hidden>
+  <button class="scrim" id="stscrim" aria-label="Cerrar"></button>
+  <div class="pane" role="dialog" aria-modal="true" aria-labelledby="st-t">
+    <div class="grab"></div>
+    <div class="smapw"><div class="smap" id="smap"></div><p class="smsg" id="smsg">Cargando el mapa…</p>
+      <button class="srec" id="srec" aria-label="Centrar en ti y la parada"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></button></div>
+    <div class="shd"><div><h2 id="st-t"></h2><p class="sub" id="st-sub"></p></div>
+      <button class="sx" id="stx" aria-label="Cerrar"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+    <div class="schips" id="stchips"></div>
+    <div id="stleave" aria-live="polite"></div>
+    <a class="bigbtn" id="stgo" target="_blank" rel="noopener"></a>
+    <button class="bigbtn sec" id="stok" hidden>Listo</button>
+    <p class="note" id="stnote">Se abre en tu app de mapas</p>
+  </div>
+</div>
 <div class="wiz" id="wiz" hidden role="dialog" aria-modal="true" aria-labelledby="wt">
   <header>
     <div class="top"><button class="wnav" id="wback">‹ Atrás</button><span class="wstep" id="wstep">Paso 1 de 3</span></div>
@@ -395,7 +435,7 @@ let meta = { lines: {}, stops: {}, pos: {} };
 try { const c = JSON.parse(localStorage.getItem("mibus-meta2")); if (c && c.m && c.m.lines) meta = c.m; } catch (e) {}
 // Dónde estás (de autoTab), para el "sal en X min". Solo se usa si es reciente y precisa.
 let here = null, locDenied = false, missOpen = false;
-let heroBus = null, mgFrom = null; // bus de la tarjeta grande (para el ejemplo de la hoja) y botón que abrió la hoja
+let heroBus = null, mgFrom = null, busesAll = [], ST = null; // ST: hoja «Ver parada» abierta // bus de la tarjeta grande (para el ejemplo de la hoja) y botón que abrió la hoja
 const MARGEN_SALIDA = 3;   // margen por defecto, el mismo que el Worker (ascensor, portal…)
 // Cada uno elige su margen (en su móvil), por trayecto y sentido: salir de casa no es salir de un piso 7.
 function margenKey() { return 'mibus-margen-' + (cfg && cfg.id) + '-' + tab; }
@@ -577,8 +617,19 @@ const ICON = {
   walk: '<svg class="ic" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="13" cy="4" r="2"/><path d="m9 20 3-6 3 3v4"/><path d="m6 12 3-4 4 1 3 3h3"/></svg>',
   nav: '<svg class="ic" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>',
   pinb: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg>',
+  arrow: '<svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
+  go: '<svg class="ic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 11 18-8-8 18-2-8z"/></svg>',
   chev: '<svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>'
 };
+const ICON_CHEVR = '<svg class="sc" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>';
+// «📍 Ronda de Nelle 109 · 160 m · sentido El Corte Inglés · Ver parada ›» en la tarjeta grande: abre el mapa.
+function stopBtn(id) {
+  const q = posOf(id), me = stHere();
+  const m = q && me ? Math.round(km(me.p, q) * 1000 * RODEO / 10) * 10 : null;
+  const sub = (m != null && m <= 2500 ? m + ' m · ' : '') + 'sentido ' + names(cfg).to;
+  return '<button class="stpb" data-map="' + id + '" aria-haspopup="dialog"><span class="pi">' + ICON.pin + '</span><span><b>' + esc(stopName(id)) + '</b><small>' + esc(sub) + '</small></span>' +
+    '<span class="vp">Ver parada' + ICON_CHEVR.replace('class="sc"', '') + '</span></button>';
+}
 // Cuándo salir para el bus grande: con ubicación, «Sal en X min»; sin ella, botón que la pide explicando para qué.
 function leaveBox(b) {
   if (b.walk == null) {
@@ -716,6 +767,7 @@ function renderList(stops) {
     }
   }
   all.sort((a, b) => a.left - b.left || a.at - b.at);
+  busesAll = all;
   const favs = all.filter((b) => b.fav);
   // Parada fijada (por trayecto y sentido): va la primera y el grande es su próximo bus.
   const pinId = cfg.pin && cfg.pin[tab];
@@ -737,7 +789,7 @@ function renderList(stops) {
       '<div class="hm"><div class="chip" style="background:' + li.c + '">' + esc(li.n) + '</div>' +
       '<div class="when"><small>Pasa a las</small><b class="big">' + hhmm(first.at) + '</b></div>' +
       (first.left <= 1 && !first.prog ? '<span class="in now">Llegando</span>' : '<span class="in">en ' + first.left + ' min</span>') + '</div>' +
-      '<div class="stp">' + esc(stopName(first.stop)) + '</div>' +
+      stopBtn(first.stop) +
       (gone ? '<div class="then"><span>' + (gone.left <= 3 ? 'Está llegando el de' : 'Antes pasa el de') + '</span>' + tchip(gone) + '</div>' : '') +
       (then.length ? '<div class="then"><span>Luego</span>' + then.map(tchip).join('') + '</div>' : '') + leaveBox(first) + '</section>';
   }
@@ -765,7 +817,7 @@ function renderList(stops) {
       return '<div class="ln' + (x.fav ? '' : ' other') + '"><div class="chip" style="background:' + li.c + '">' + esc(li.n) + '</div><div class="ts">' + x.list.map(tchip).join('') + '</div></div>';
     }).join('');
     const on = g.s.id === pinned;
-    return '<section class="stop' + (on ? ' pinned' : '') + '"><h3>' + ICON.pin + '<span class="nm">' + esc(shortName(g.s.id)) + '</span>' + goShort(g.lead && g.lead.fav ? g.lead : null) +
+    return '<section class="stop' + (on ? ' pinned' : '') + '"><h3><button class="stopb" data-map="' + g.s.id + '" aria-haspopup="dialog" aria-label="Ver ' + esc(stopName(g.s.id)) + ' en el mapa">' + ICON.pin + '<span class="nm">' + esc(shortName(g.s.id)) + '</span>' + ICON_CHEVR + '</button>' + goShort(g.lead && g.lead.fav ? g.lead : null) +
       (stops.length > 1 ? '<button class="pinb" data-pin="' + g.s.id + '" aria-pressed="' + on + '" aria-label="' + (on ? 'Dejar de fijar ' : 'Fijar arriba ') + esc(stopName(g.s.id)) + '">' + ICON.pinb + '</button>' : '') + '</h3>' + body + '</section>';
   };
   const missed = favs.filter((b) => b.miss && !shown.has(b));
@@ -781,6 +833,7 @@ function renderList(stops) {
   const empty = !all.length && !pending ? '<div class="card"><p class="sub">' + (errs.length === stops.length ? 'No se pudo conectar con iTranvías. Prueba a actualizar.' : 'Sin buses próximos ahora mismo.') + '</p></div>' : '';
   $('list').innerHTML = hero + note + empty + '<h2 class="gh">' + (stops.length > 1 ? 'Tus paradas' : 'Tu parada') + '</h2>' + groups.map(card).join('') + missHtml +
     '<p class="legend"><span class="t live">en vivo</span><span class="t old">bus sin señal</span><span class="t sched">horario programado</span></p>';
+  if (ST) stUpdate();
 }
 
 function mins(v) { if (String(v).indexOf('<') >= 0) return 0; const n = parseFloat(String(v == null ? '' : v).replace(',', '.').replace(/[^0-9.]/g, '')); return isFinite(n) ? n : 0; }
@@ -924,6 +977,7 @@ $('reset').onclick = () => openWizard({ trip: cfg });
 $('newtrip').onclick = () => { $('sheet').hidden = true; openWizard({}); };
 $('list').onclick = (e) => {
   const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.map) { openStop(Number(b.dataset.map), b); return; }
   if (b.dataset.a === 'wizard') { openWizard({}); return; }
   if (b.dataset.a === 'loc') { locDenied = false; autoTab(); return; }
   if (b.dataset.a === 'mg') { openMg(b); return; }
@@ -1123,6 +1177,101 @@ $('mgplan').onclick = () => openMg($('mgplan'));
 $('mgok').onclick = closeMg;
 $('mgscrim').onclick = closeMg;
 $('mgsheet').addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMg(); });
+
+// ---------- «Ver parada»: hoja con el mapa, el camino a pie y «Cómo llegar» ----------
+// Leaflet y mapa.js se cargan al abrirla. El camino real lo da /api/ruta (openrouteservice en el
+// Worker, con caché); si no hay, línea recta. Se refresca con cada render (ubicación cada 20 s).
+let mapaLib = null;
+function ensureMapa() {
+  if (!mapaLib) {
+    if (!document.getElementById('lfcss')) { const l = document.createElement('link'); l.id = 'lfcss'; l.rel = 'stylesheet'; l.href = PAGES + 'vendor/leaflet/leaflet.css'; document.head.appendChild(l); }
+    mapaLib = conLimite((window.L ? Promise.resolve() : loadScript(PAGES + 'vendor/leaflet/leaflet.js'))
+      .then(() => (window.MiBusMapa ? 0 : loadScript(PAGES + 'mapa.js'))), 15000)
+      .catch((e) => { mapaLib = null; throw e; });
+  }
+  return mapaLib;
+}
+// Ubicación que vale para el mapa: reciente y con error razonable (como walkTo).
+function stHere() { return here && Date.now() - here.t < 5 * 60000 && here.acc <= 100 ? here : null; }
+const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+function mapsLink(q) {
+  const ll = q[0] + ',' + q[1];
+  return isIOS() ? 'https://maps.apple.com/?daddr=' + ll + '&dirflg=w' : 'https://www.google.com/maps/dir/?api=1&destination=' + ll + '&travelmode=walking';
+}
+function openStop(id, from) {
+  ST = { id: id, from: from || null, ruta: null, rutaDe: null, map: null, centrado: false };
+  $('st-t').textContent = stopName(id);
+  $('smsg').textContent = 'Cargando el mapa…'; $('smsg').hidden = false;
+  $('stsheet').hidden = false;
+  stUpdate();
+  $('stx').focus();
+  if (!stHere() && !locDenied) autoTab();
+  ensureMapa().then(() => {
+    if (!ST || ST.id !== id || ST.map) return;
+    $('smsg').hidden = true;
+    ST.map = window.MiBusMapa.crear($('smap'), { oscuro: matchMedia('(prefers-color-scheme: dark)').matches });
+    stUpdate();
+  }).catch(() => { if (ST && ST.id === id) $('smsg').textContent = 'No se pudo cargar el mapa. Con «Cómo llegar» lo ves en tu app de mapas.'; });
+}
+function closeStop() {
+  if (!ST) return;
+  const id = ST.id, from = ST.from;
+  if (ST.map) ST.map.destruir();
+  ST = null; $('stsheet').hidden = true;
+  const f = from && document.contains(from) ? from : $('list').querySelector('[data-map="' + id + '"]');
+  if (f) f.focus();
+}
+function stUpdate() {
+  if (!ST) return;
+  const id = ST.id, q = posOf(id), me = stHere(), n = names(cfg);
+  const recta = me && q ? km(me.p, q) * 1000 : null;
+  const cerca = recta != null && recta < Math.max(60, me.acc), lejos = recta != null && recta > 2500;
+  const real = ST.ruta && !ST.ruta.recta ? ST.ruta : null;
+  $('st-sub').textContent = 'Parada ' + id;
+  // Chips: cuánto andas (por la calle si hay ruta; si no, la estimación de siempre) y el sentido.
+  let chips = '';
+  if (cerca) chips += '<span>' + ICON.walk + '<b>' + Math.max(5, Math.round(recta / 5) * 5) + ' m</b></span>';
+  else if (recta != null && !lejos) {
+    const m = real ? real.m : recta * RODEO;
+    chips += '<span>' + ICON.walk + '<b>' + Math.max(1, Math.ceil(m / ANDAR_M_MIN)) + ' min</b> · ' + Math.round(m / 10) * 10 + ' m</span>';
+  }
+  chips += '<span>' + ICON.arrow + 'Sentido ' + esc(n.to) + '</span>';
+  $('stchips').innerHTML = chips;
+  // El próximo bus de esta parada al que llegas (de tus líneas, si hay).
+  const b = busesAll.find((x) => x.stop === id && x.fav && !x.miss) || busesAll.find((x) => x.stop === id && !x.miss);
+  let box = '';
+  if (b) {
+    const li = lineInfo(b.linea), k = src(b);
+    const when = 'pasa a las ' + hhmm(b.at) + (b.left <= 1 && !b.prog ? ' · llegando' : ' · en ' + b.left + ' min') + (k === 'sched' ? ' · horario programado' : k === 'old' ? ' · bus sin señal' : ' · en vivo');
+    const chip = '<div class="chip" style="background:' + li.c + '">' + esc(li.n) + '</div>';
+    let cls = 'nt', big = 'Pasa a las ' + hhmm(b.at), small = when.replace(/^pasa a las \d\d:\d\d · /, '');
+    if (cerca || b.walk === 0) { cls = 'ok'; big = 'Ya estás en la parada'; small = when; }
+    else if (b.walk != null) { const s = b.left - b.walk; cls = s < 5 ? 'bad' : s < 10 ? 'warn' : 'ok'; big = s <= 0 ? '¡Sal ya!' : 'Sal en ' + s + ' min'; small = when; }
+    box = '<div class="leave ' + cls + '">' + chip + '<span><b>' + big + '</b><small>' + small + '</small></span></div>';
+  }
+  $('stleave').innerHTML = box;
+  // En la parada ya no hace falta «Cómo llegar»: queda «Listo».
+  $('stgo').hidden = cerca; $('stok').hidden = !cerca; $('stnote').hidden = cerca || !q;
+  if (q) { $('stgo').href = mapsLink(q); $('stgo').innerHTML = ICON.go + 'Cómo llegar andando'; }
+  // Camino real: se pide al abrir y otra vez si te has movido más de ~60 m.
+  if (me && q && !cerca && !lejos && PROXY && (!ST.rutaDe || km(ST.rutaDe, me.p) > 0.06)) {
+    const st = ST; st.rutaDe = me.p;
+    tryFetch(PROXY.replace(/\/$/, '') + '/api/ruta?id=' + id + '&lat=' + me.p[0].toFixed(5) + '&lon=' + me.p[1].toFixed(5), 8000)
+      .then((j) => { if (ST !== st) return; const first = !(st.ruta && !st.ruta.recta) && j && !j.recta; st.ruta = j; if (first) st.centrado = false; stUpdate(); })
+      .catch(() => {});
+  }
+  if (ST.map && q) {
+    const ls = [...new Set(busesAll.filter((x) => x.stop === id && x.fav).map((x) => x.linea))].map((l) => lineInfo(l));
+    ST.map.pintar({ parada: q, lineas: ls, yo: me ? { p: me.p, acc: me.acc } : null, camino: real ? real.linea : null, recta: !real, cerca: cerca });
+    if (!ST.centrado || ST.cerca !== cerca) { ST.map.tamano(); ST.map.centrar(); ST.centrado = true; }
+  }
+  ST.cerca = cerca;
+}
+$('stx').onclick = closeStop;
+$('stok').onclick = closeStop;
+$('stscrim').onclick = closeStop;
+$('srec').onclick = () => { if (ST && ST.map) ST.map.centrar(); };
+$('stsheet').addEventListener('keydown', (e) => { if (e.key === 'Escape') closeStop(); });
 function planLabel() { margenLabel(); $('pl').textContent = tab === 'ida' ? 'Quiero llegar a las' : 'Quiero salir a las'; try { const v = localStorage.getItem('mibus-plan-' + tab); $('pt').value = v || (tab === 'ida' ? '10:00' : '22:00'); } catch (e) {} $('pr').innerHTML = ''; }
 const hm = (t) => { const [h, m] = String(t).split(':').map(Number); return h * 60 + m; };
 const hmTxt = (n) => { n = ((n % 1440) + 1440) % 1440; return String(Math.floor(n / 60)).padStart(2, '0') + ':' + String(n % 60).padStart(2, '0'); };
