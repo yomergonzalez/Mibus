@@ -28,6 +28,7 @@
   const R = 6371000;
   const CAMINO = 1.2;        // las calles no son línea recta (Google desde casa: 680 m en recta = 800 m por la calle)
   const PASO = 72;           // metros por minuto andando (~4,3 km/h, con semáforos)
+  const ALPIE_M = 1000;      // hasta dónde una parada «se coge andando» desde el origen (mismo km que el Directo lejano)
 
   function distM(a, b) {
     const rad = Math.PI / 180;
@@ -206,7 +207,11 @@
             const esp = espera(b.r);
             const total = a.ini.minAndando + a.minBus + pie + esp + b.minBus + b.fin.minAndando;
             // Si desde la bajada del primero llegas andando igual de rápido (contando la espera), el segundo bus sobra.
-            if (minAndando(distM(pos[a.fin.id], destino)) <= pie + esp + b.minBus + b.fin.minAndando + 3) continue;
+            // Salvo si a la parada del segundo también se llega andando desde el origen (≤ 1 km, como el Directo
+            // «andando + el 11»): ahí el primer bus solo te acerca a un bus que ibas a coger igual (14 › 11 desde
+            // Outeiro 249 en vez de 14 min a pie hasta Arteixo 105), y lo que decide es el filtro de abajo.
+            const alPie = pos[c.id] && distM(origen, pos[c.id]) <= ALPIE_M;
+            if (!alPie && minAndando(distM(pos[a.fin.id], destino)) <= pie + esp + b.minBus + b.fin.minAndando + 3) continue;
             // Y si andando hasta la parada del segundo tardas lo mismo que en el primer bus, el primero sobra.
             if (pos[c.id] && minAndando(distM(origen, pos[c.id])) <= a.ini.minAndando + a.minBus + pie) continue;
             const k = a.r.linea + '>' + b.r.linea + '|' + a.ini.id;

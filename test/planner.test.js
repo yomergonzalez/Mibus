@@ -113,9 +113,14 @@ test('opcionesConTransbordo: un bus, cambio a pocos metros y otro bus (GTFS real
   assert.ok(o.length > 0);
   // El segundo bus siempre es el 11 (1100), el único que llega a Marineda, y nunca la misma línea dos veces.
   for (const x of o) { assert.equal(x.linea2, '1100'); assert.notEqual(x.linea, x.linea2); assert.ok(x.minCambio <= 5); }
-  // El 12 (1200) de Nelle cambiando al 11 está entre las opciones. (Con el andar calibrado, 14/22 › 11 ya no
-  // compensan: desde Vioño se llega andando antes que esperando al 11, como dice Google.)
+  // El 12 (1200) de Nelle cambiando al 11 está entre las opciones.
   assert.ok(o.some((x) => x.linea === '1200' && /Nelle/.test(x.sube.nombre)), JSON.stringify(o.slice(0, 5).map((x) => [x.linea, x.baja.nombre, x.sube2.nombre])));
+  // Y el 14 (1400) y el 12A (1500) de Outeiro 249 hasta el 11 de Av. de Arteixo 105 (28 nov, Yomer: «no me aparece»).
+  // Desde Vioño se llegaría andando casi igual que esperando al 11, pero a Arteixo 105 también se va andando
+  // desde casa (14 min, el Directo): el 14 solo te acerca al mismo 11 (5 + 4 + 2 = 11 min), así que vale.
+  for (const l of ['1400', '1500']) {
+    assert.ok(o.some((x) => x.linea === l && x.sube.id === '94' && x.sube2.id === '466'), l + ' › 11 desde Rda. de Outeiro, 249');
+  }
   // Ordenadas por tiempo total.
   for (let i = 1; i < o.length; i++) assert.ok(o[i - 1].total <= o[i].total);
 });
