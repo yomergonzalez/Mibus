@@ -41,6 +41,29 @@ h1.brand svg{flex:none;margin:-2px 0 -4px -3px}
 .dc.new{background:transparent;box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.45);font-weight:700}
 .trip .swap{flex:none;min-height:44px;padding:0 14px 0 12px;border:0;border-radius:22px;background:rgba(255,255,255,.14);color:#fff;display:flex;align-items:center;gap:6px;font:800 14px Figtree,system-ui,sans-serif}
 .dnew{flex:none;margin-left:auto;width:44px;height:44px;border:0;border-radius:22px;background:#2bd47d;color:#0f2a44;display:flex;align-items:center;justify-content:center}
+/* «¿A dónde vas?»: barra en la cabecera, línea de dónde estás y la pantalla de inicio (#home) */
+.godest{display:flex;align-items:center;gap:10px;width:100%;max-width:640px;margin:10px auto 0;min-height:44px;padding:0 14px;border:0;border-radius:22px;background:rgba(255,255,255,.14);color:#fff;font:700 16px Figtree,system-ui,sans-serif;text-align:left}
+.godest span{opacity:.85}
+.where{display:flex;align-items:center;gap:6px;max-width:640px;margin:8px auto 0;font-size:13px;color:rgba(255,255,255,.8)}.where[hidden]{display:none}
+.where svg,.hwhere svg{flex:none;color:#2bd47d}
+.home header{padding-bottom:16px}
+.hwhere{display:flex;align-items:center;gap:6px;max-width:640px;margin:14px auto 0;min-height:32px;font-size:14px;color:rgba(255,255,255,.82)}
+.hwhere small{font-size:14px;opacity:.7}
+.hwhere button{flex:none;margin-left:auto;min-height:36px;padding:0 2px;border:0;background:none;color:inherit;font:700 13px Figtree,system-ui,sans-serif;text-decoration:underline;text-underline-offset:3px}
+.home h1.hq{max-width:640px;margin:4px auto 12px;font:800 28px/1.1 Figtree,system-ui,sans-serif}
+.home .srch{max-width:640px;margin:0 auto;border:0;color:var(--ink)}.home .srch svg{flex:none;color:var(--mute)}
+.drow[hidden]{display:none}
+.home .wb{gap:18px;padding-top:16px}
+.hrow{min-height:60px}.hrow>.ht{flex:1;min-width:0}.hrow>svg{flex:none;color:var(--mute)}
+.lst>.hrow>span.hi,.hi{flex:none;width:36px;height:36px;border-radius:18px;display:grid;place-items:center;background:var(--bg);color:var(--mute)}.hi.home{background:var(--soft);color:var(--red)}
+.hadd{display:flex;align-items:center;gap:12px;width:100%;min-height:64px;padding:0 14px;border:1.5px dashed light-dark(#c9c9d1,#44444c);border-radius:16px;background:transparent;color:var(--ink);font:inherit;text-align:left}
+.hadd b{display:block;font-size:16px}.hadd small{display:block;font-size:13px;color:var(--mute)}
+.hadd i,.dadd.sv i{flex:none;width:36px;height:36px;border-radius:18px;background:#2bd47d;color:#0f2a44;display:grid;place-items:center}
+.svin{min-height:52px;border-radius:14px;border:1.5px solid var(--red);background:var(--card);color:var(--ink);font:700 17px Figtree,system-ui,sans-serif;padding:0 14px;width:100%}
+.svq{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0}
+.svq button{min-height:44px;padding:0 16px;border-radius:22px;border:0;background:var(--bg);color:var(--ink);font:700 15px Figtree,system-ui,sans-serif}
+#svsheet{z-index:35}
+.svlab{font-size:13px;font-weight:700;color:var(--mute);text-transform:uppercase;letter-spacing:.04em;margin:6px 4px 0}
 .sheet{position:fixed;inset:0;z-index:20;display:flex;flex-direction:column;justify-content:flex-end}
 .sheet[hidden]{display:none}
 .scrim{position:absolute;inset:0;border:0;background:rgba(17,17,20,.45)}
@@ -299,10 +322,12 @@ footer{color:var(--mute);font-size:13px;text-align:center;padding:0 16px 28px}
 </style></head><body>
 <header>
   <div class="top"><h1 class="brand"><svg width="30" height="30" viewBox="10 10 80 80" aria-hidden="true"><rect x="45.5" y="60" width="9" height="24" rx="4.5" fill="#fff"/><circle cx="50" cy="40" r="22" fill="none" stroke="#fff" stroke-width="9"/><circle cx="50" cy="40" r="12.5" fill="none" stroke="#2bd47d" stroke-width="2.5" opacity=".45"/><circle cx="50" cy="40" r="7" fill="#2bd47d"/></svg>corunauta</h1><div class="live"><span id="upd" class="upd">Cargando…</span><button id="refresh" aria-label="Actualizar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg></button></div></div>
+  <button class="godest" id="godest"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span>¿A dónde vas?</span></button>
   <div class="trip">
     <div class="route" id="route"></div>
     <button class="swap" id="swap"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4v16M3 8l4-4 4 4M17 20V4M13 16l4 4 4-4"/></svg><span id="swaplbl">Volver</span></button>
   </div>
+  <p class="where" id="where" hidden></p>
   <div class="drow" id="drow" role="group" aria-label="Tus destinos"></div>
 </header>
 <main id="list"></main>
@@ -368,6 +393,28 @@ footer{color:var(--mute);font-size:13px;text-align:center;padding:0 16px 28px}
     <div class="prog" id="wprog"><i></i><i></i><i></i></div>
   </header>
   <div class="wb" id="wb"></div>
+</div>
+<div class="wiz home" id="home" hidden role="dialog" aria-modal="true" aria-labelledby="hq-t">
+  <header>
+    <div class="top"><h1 class="brand"><svg width="30" height="30" viewBox="10 10 80 80" aria-hidden="true"><rect x="45.5" y="60" width="9" height="24" rx="4.5" fill="#fff"/><circle cx="50" cy="40" r="22" fill="none" stroke="#fff" stroke-width="9"/><circle cx="50" cy="40" r="12.5" fill="none" stroke="#2bd47d" stroke-width="2.5" opacity=".45"/><circle cx="50" cy="40" r="7" fill="#2bd47d"/></svg>corunauta</h1><button class="wnav" id="hclose" hidden>✕ Cerrar</button></div>
+    <p class="hwhere" id="hwhere" aria-live="polite"></p>
+    <h1 class="hq" id="hq-t">¿A dónde vas?</h1>
+    <label class="srch"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><input id="hq" type="search" autocomplete="off" enterkeyhint="search" aria-label="A dónde vas" placeholder="Una calle, un sitio, un barrio…"></label>
+  </header>
+  <div class="wb" id="hbody"></div>
+</div>
+<div class="sheet" id="svsheet" hidden>
+  <button class="scrim" id="svscrim" aria-label="Cerrar"></button>
+  <div class="pane" role="dialog" aria-modal="true" aria-labelledby="sv-t">
+    <div class="grab"></div>
+    <div class="shead"><h2 id="sv-t">Guardar destino</h2><small id="sv-s"></small></div>
+    <label class="svlab" for="svname">Nombre</label>
+    <input id="svname" class="svin" maxlength="40" autocomplete="off" required>
+    <p class="note" id="sv-n">Así lo verás en tus destinos. Puedes cambiarlo.</p>
+    <div class="svq" id="svq"></div>
+    <button class="bigbtn" id="svok">Guardar</button>
+    <button class="ghost" id="svno">Ahora no</button>
+  </div>
 </div>
 <div class="toast" id="toast" role="status" hidden></div>
 <footer>Tiempos en vivo de iTranvías (Compañía de Tranvías de A Coruña). Se actualiza cada 30 s.</footer>
@@ -476,12 +523,16 @@ function load() {
 }
 function loadStore() {
   try { const s = JSON.parse(localStorage.getItem(STORE_KEY)); if (s && Array.isArray(s.trips)) return s; } catch (e) {}
-  // Primera vez con trayectos: lo que tenías (o las paradas por defecto) pasa a ser «Casa → Trabajo».
+  // Alguien nuevo empieza sin trayectos («¿A dónde vas?»). Antes se le creaba «Casa → Trabajo» con las paradas
+  // de Yomer y la app abría con un destino que no era suyo (demo a Alison, 27 nov).
+  let had = false; try { had = !!localStorage.getItem('mibus-cfg-v4'); } catch (e) {}
+  if (!had) return { trips: [], cur: '', dir: null };
+  // Quien venía de la versión de un solo trayecto: lo que tenía pasa a ser «Casa → Trabajo».
   const old = load();
   return { trips: [{ id: 't1', origen: { nombre: 'Casa', pos: null }, destino: { nombre: 'Trabajo', pos: null }, ida: old.ida, vuelta: old.vuelta }], cur: 't1', dir: null };
 }
 function curTrip() { return store.trips.find((t) => t.id === store.cur) || store.trips[0] || EMPTY; }
-function save() { store.cur = cfg.id; store.dir = tab; try { localStorage.setItem(STORE_KEY, JSON.stringify(store)); } catch (e) {} }
+function save() { if (!cfg.temp) store.cur = cfg.id; store.dir = tab; try { localStorage.setItem(STORE_KEY, JSON.stringify(store)); } catch (e) {} }
 // Sin coordenadas guardadas (trayectos migrados), el centro de sus paradas.
 function endPos(t, which) { const e = t[which]; return (e && e.pos) || centre(which === 'origen' ? t.ida : t.vuelta); }
 function names(t, dir) { const a = t.origen.nombre, b = t.destino.nombre; return (dir || tab) === 'ida' ? { from: a, to: b } : { from: b, to: a }; }
@@ -492,15 +543,17 @@ const CHEV = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke
 const PLUS = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';
 const RARROW = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>';
 function renderTrip() {
-  const none = !store.trips.length;
-  $('swap').disabled = none; $('editbtn').hidden = none;
+  const none = !store.trips.length && !cfg.temp;
+  $('swap').disabled = none; $('editbtn').hidden = none || !!cfg.temp;
+  renderWhere();
+  $('drow').hidden = !store.trips.length;
   if (none) {
     $('route').textContent = 'Sin trayectos';
     $('drow').dataset.k = '';
     $('drow').innerHTML = '<button class="dc new" data-new="1">＋ Configura tu trayecto</button>';
     $('swaplbl').textContent = 'Volver'; $('plan').hidden = true; return;
   }
-  const n = names(cfg), home = cfg.origen.nombre;
+  const n = names(cfg), home = cfg.temp ? (store.trips[0] && store.trips[0].origen.nombre) : cfg.origen.nombre;
   $('route').innerHTML = '<span class="from">' + esc(n.from) + '</span>' + RARROW + '<span class="to">' + esc(n.to) + '</span>';
   $('route').setAttribute('aria-label', 'De ' + n.from + ' a ' + n.to);
   const key = store.trips.map((t) => t.id + t.origen.nombre + t.destino.nombre).join('|') + cfg.id;
@@ -542,14 +595,14 @@ addEventListener('resize', fitChips);
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitChips);
 $('drow').onclick = (e) => {
   const b = e.target.closest('button'); if (!b) return;
-  if (b.dataset.new) { openWizard({ desde: store.trips.length ? cfg : null }); return; }
+  if (b.dataset.new) { openHome(); return; }
   if (b.dataset.more || b.getAttribute('aria-pressed') === 'true') { openSheet(); return; }
   // Al cambiar de destino se mantiene el sentido (si estabas en la vuelta, la vuelta del otro).
   setTrip(b.dataset.dest, tab);
   const again = $('drow').querySelector('[data-dest="' + b.dataset.dest + '"]'); if (again) again.focus();
 };
 function setTrip(id, dir) {
-  const t = store.trips.find((x) => x.id === id); if (!t) return;
+  const t = cfg.temp && id === cfg.id ? cfg : store.trips.find((x) => x.id === id); if (!t) return;
   cfg = t; tab = dir; manual = true; byLoc = false; filt = null; nearId = null;
   store.manualAt = Date.now();
   save(); render(); refresh();
@@ -565,10 +618,10 @@ function lineInfo(id) {
 function render() {
   if (render.tab !== tab + cfg.id) { render.tab = tab + cfg.id; planLabel(); }
   renderTrip();
-  if (!store.trips.length) { $('list').innerHTML = '<section class="card" style="padding-bottom:14px"><h2>No tienes trayectos</h2><p class="sub">Dinos desde dónde sales y a dónde vas, y elegimos las paradas por ti.</p><button class="bigbtn" data-a="wizard">Configura tu trayecto</button></section>'; return; }
+  if (!store.trips.length && !cfg.temp) { $('list').innerHTML = '<section class="card" style="padding-bottom:14px"><h2>¿A dónde vas?</h2><p class="sub">Dinos a dónde vas y te damos la parada y el bus.</p><button class="bigbtn" data-a="wizard">Buscar destino</button></section>'; return; }
   const stops = cfg[tab];
-  if (!stops.length) { $('list').innerHTML = '<div class="card"><p class="sub">' + (document.body.classList.contains('editing') ? 'No hay paradas. Añade una abajo.' : 'No hay paradas. Pulsa «Editar paradas» para añadir una.') + '</p></div>'; if (document.body.classList.contains('editing') && AD.key !== tab + cfg.id) renderAdd(); return; }
-  if (!document.body.classList.contains('editing')) { renderList(stops); return; }
+  if (!stops.length) { $('list').innerHTML = '<div class="card"><p class="sub">' + (cfg.temp ? 'No hay bus de vuelta desde ' + esc(cfg.destino.nombre) + '.' : document.body.classList.contains('editing') ? 'No hay paradas. Añade una abajo.' : 'No hay paradas. Pulsa «Editar paradas» para añadir una.') + '</p></div>'; if (document.body.classList.contains('editing') && AD.key !== tab + cfg.id) renderAdd(); return; }
+  if (!document.body.classList.contains('editing')) { renderList(stops); if (cfg.temp) saveBtn(); return; }
   if (AD.key !== tab + cfg.id + stops.map((s) => s.id).join(',')) renderAdd();
   renderEdit(stops);
 }
@@ -889,6 +942,10 @@ function autoTab() {
   try {
     navigator.geolocation.getCurrentPosition((p) => {
       here = { p: [p.coords.latitude, p.coords.longitude], acc: p.coords.accuracy || 9999, t: Date.now() };
+      if (!$('home').hidden) hRender();
+      // Al abrir la app (o al volver tras 5 min): si no estás cerca de ninguno de los dos extremos
+      // del destino abierto, no tiene sentido enseñarlo: «¿A dónde vas?».
+      if (homeCheck && stHere()) { homeCheck = false; if (!manual && lejosDe(cfg, here.p)) { openHome(); render(); return; } }
       if (manual) { render(); return; }
       // Abre el último trayecto; solo cambia de sentido si estás a menos de 300 m de su final
       // (en el destino → vuelta; en el origen con la vuelta abierta → ida).
@@ -904,7 +961,7 @@ function autoTab() {
       if (!manualFilt) filt = nearId;
       render();
       if (changed) refresh(); else tick();
-    }, (e) => { if (e && e.code === 1) { locDenied = true; render(); } }, { maximumAge: 10000, timeout: 10000, enableHighAccuracy: true });
+    }, (e) => { if (e && e.code === 1) { locDenied = true; render(); if (!$('home').hidden) hRender(); } }, { maximumAge: 10000, timeout: 10000, enableHighAccuracy: true });
   } catch (e) {}
 }
 
@@ -982,7 +1039,7 @@ $('triplist').onclick = (e) => {
       delArmed = t.id; del.classList.add('armed'); del.textContent = '¿Eliminar?'; return;
     }
     store.trips = store.trips.filter((x) => x !== t); delArmed = '';
-    if (!store.trips.length) { $('sheet').hidden = true; cfg = EMPTY; tab = 'ida'; save(); render(); openWizard({}); return; }
+    if (!store.trips.length) { $('sheet').hidden = true; cfg = EMPTY; tab = 'ida'; save(); render(); openHome(); return; }
     if (t === cfg) setTrip(store.trips[0].id, 'ida'); else { save(); render(); }
     openSheet(); return;
   }
@@ -1001,11 +1058,12 @@ $('list').addEventListener('toggle', (e) => {
   if (c.contains('nogo')) { const id = Number(e.target.dataset.s); if (e.target.open) edOpen.add(id); else edOpen.delete(id); }
 }, true);
 $('reset').onclick = () => openWizard({ trip: cfg });
-$('newtrip').onclick = () => { $('sheet').hidden = true; openWizard({}); };
+$('newtrip').onclick = () => { $('sheet').hidden = true; openHome(); };
 $('list').onclick = (e) => {
   const b = e.target.closest('button'); if (!b) return;
   if (b.dataset.map) { openStop(Number(b.dataset.map), b); return; }
-  if (b.dataset.a === 'wizard') { openWizard({}); return; }
+  if (b.dataset.a === 'wizard') { openHome(); return; }
+  if (b.dataset.a === 'savetemp') { openSave('dest', b); return; }
   if (b.dataset.a === 'loc') { locDenied = false; autoTab(); return; }
   if (b.dataset.a === 'mg') { openMg(b); return; }
   if (b.dataset.via) { viaPick[cfg.id + tab] = { v: b.dataset.via, t: Date.now() }; render(); const again = $('list').querySelector('[data-via="' + b.dataset.via + '"]'); if (again) again.focus(); return; }
@@ -1402,7 +1460,7 @@ function wLocate() {
 // Paradas para cada sentido: una fila por parada con todas las líneas que te llevan.
 // Se marca sola la más rápida y otra casi igual (≤ 2 min más), como mucho 2.
 function stopGroups(list, prev) {
-  const g = W.lib.P.porParadaDeSubida(list).map((x) => {
+  const g = LIB.P.porParadaDeSubida(list).map((x) => {
     const best = x.opciones.reduce((a, o) => (o.total < a.total ? o : a));
     return { id: x.parada.id, nombre: x.parada.nombre, lineas: x.opciones.map((o) => o.linea), best };
   }).sort((a, b) => a.best.total - b.best.total || a.best.minAndandoIni - b.best.minAndandoIni);
@@ -1453,24 +1511,31 @@ function viaGroups(list, dir, prev) {
   if (!prev && out.length && (!d || out[0].best.total + 3 <= d.total)) { sel.add(out[0].key); dir.sel.clear(); }
   return { list: out, sel };
 }
-function wCompute() {
-  const P = W.lib.P, r = { radioOrigenM: 600, radioDestinoM: 400, inclusoSiAndarEsMejor: !!W.anyway };
+// Paradas de ida y vuelta entre dos puntos, ya marcadas las mejores (lo mismo que el paso 3 del asistente).
+// Lo usan el asistente y «¿A dónde vas?» (destino desde donde estás).
+function planear(a, b, prevIda, prevVta, anyway) {
+  const P = LIB.P, r = { radioOrigenM: 600, radioDestinoM: 400, inclusoSiAndarEsMejor: !!anyway };
   // Si no hay directo cerca, se mira hasta 1 km de tu origen (no del destino): «andando hasta el 11»
   // (casa → Marineda, la parada del 11 está a 12–13 min a pie) también es una forma de ir y hay que poder compararla.
-  const dirs = (a, b, lejos) => {
-    const l = P.opcionesDirectas(a, b, r);
-    return l.length ? l : P.opcionesDirectas(a, b, Object.assign({}, r, lejos));
+  const dirs = (x, y, lejos) => {
+    const l = P.opcionesDirectas(x, y, r);
+    return l.length ? l : P.opcionesDirectas(x, y, Object.assign({}, r, lejos));
   };
-  W.ida = stopGroups(dirs(W.origen.pos, W.destino.pos, { radioOrigenM: 1000 }), W.trip && W.trip.ida);
-  W.vta = stopGroups(dirs(W.destino.pos, W.origen.pos, { radioDestinoM: 1000 }), W.trip && W.trip.vuelta);
-  W.ida.via = viaGroups(P.opcionesConTransbordo(W.origen.pos, W.destino.pos), W.ida, W.trip && W.trip.ida);
-  W.vta.via = viaGroups(P.opcionesConTransbordo(W.destino.pos, W.origen.pos), W.vta, W.trip && W.trip.vuelta);
-  W.opts = W.ida.list.concat(W.ida.via.list);
-  W.tab = 'ida'; W.needVta = false;
+  const ida = stopGroups(dirs(a, b, { radioOrigenM: 1000 }), prevIda);
+  const vta = stopGroups(dirs(b, a, { radioDestinoM: 1000 }), prevVta);
+  ida.via = viaGroups(P.opcionesConTransbordo(a, b), ida, prevIda);
+  vta.via = viaGroups(P.opcionesConTransbordo(b, a), vta, prevVta);
+  const opts = ida.list.concat(ida.via.list);
   // Para explicar por qué no sale nada: lo que se tarda andando y si hay bus directo aunque sea más lento.
-  W.walkM = P.distM(W.origen.pos, W.destino.pos);
-  W.walkMin = P.minAndando(W.walkM);
-  W.slower = W.opts.length || W.anyway ? 0 : P.opcionesDirectas(W.origen.pos, W.destino.pos, Object.assign({}, r, { inclusoSiAndarEsMejor: true })).length;
+  const walkM = P.distM(a, b);
+  return { ida, vta, opts, walkM, walkMin: P.minAndando(walkM),
+    slower: opts.length || anyway ? 0 : P.opcionesDirectas(a, b, Object.assign({}, r, { inclusoSiAndarEsMejor: true })).length };
+}
+function wCompute() {
+  const pl = planear(W.origen.pos, W.destino.pos, W.trip && W.trip.ida, W.trip && W.trip.vuelta, W.anyway);
+  W.ida = pl.ida; W.vta = pl.vta; W.opts = pl.opts;
+  W.tab = 'ida'; W.needVta = false;
+  W.walkM = pl.walkM; W.walkMin = pl.walkMin; W.slower = pl.slower;
 }
 // «a 500 m» o «a 1,2 km», en línea recta y redondeado.
 function wDist(m) { return m < 1000 ? Math.max(10, Math.round(m / 10) * 10) + ' m' : (Math.round(m / 100) / 10).toString().replace('.', ',') + ' km'; }
@@ -1700,15 +1765,270 @@ $('wback').onclick = () => {
 };
 $('wiz').addEventListener('keydown', (e) => { if (e.key === 'Escape') closeWizard(); });
 
+// ---------- «¿A dónde vas?»: el inicio parte de donde estás, no de un trayecto fijo ----------
+// Eliges destino → la app calcula las paradas desde tu ubicación (como el paso 3 del asistente, ya marcadas)
+// y lo abre como destino temporal (cfg.temp, id 'aqui', sin guardar). «Guardar destino» lo pasa a tus destinos.
+// Si eliges un destino guardado y estás en su origen (o en su destino, para la vuelta), se abre ese, con tus paradas.
+let homeCheck = true, hTimer = 0, SV = null;
+const CERCA_INICIO_KM = 0.5; // más lejos que esto de los dos extremos del destino abierto → «¿A dónde vas?» al abrir
+const H = { q: '', res: [], searching: false, origen: null, pick: false, pend: null, msg: null, busy: '', rows: [], rec: [], pop: [] };
+if (!Array.isArray(store.recent)) store.recent = [];
+if (!Array.isArray(store.lugares)) store.lugares = [];
+const ICON_NAV = '<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>';
+const IC_HOME = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10"/></svg>';
+const IC_STAR = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z"/></svg>';
+const IC_CLOCK = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
+const IC_PLUS = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';
+const esCasa = (n) => norm(n).trim() === 'casa';
+
+// Calle aproximada: la de la parada más cercana («Rda. de Nelle, 109» → «Rda. de Nelle»), sin pedir nada a la red.
+function streetNear(p) {
+  const pos = Object.assign({}, FALL_POS, meta.pos || {}, (LIB && LIB.meta && LIB.meta.pos) || {});
+  let best = null, bd = Infinity;
+  for (const id in pos) { const d = km(p, pos[id]); if (d < bd) { bd = d; best = id; } }
+  if (best == null || bd > 0.5) return '';
+  const n = (LIB && LIB.meta && LIB.meta.stops[best]) || stopName(Number(best));
+  return String(n).replace(/,.*$/, '').trim();
+}
+// Lugares con nombre: los que guardaste (Casa) y los extremos de tus destinos guardados.
+function lugares() {
+  const out = [], add = (nombre, pos, sub) => {
+    if (!pos || !nombre || out.some((x) => norm(x.nombre) === norm(nombre) && km(x.pos, pos) < 0.3)) return;
+    out.push({ nombre, pos, sub });
+  };
+  for (const l of store.lugares) add(l.nombre, l.pos, 'Lugar guardado');
+  for (const t of store.trips) add(t.origen.nombre, endPos(t, 'origen'), 'Lugar guardado');
+  for (const t of store.trips) add(t.destino.nombre, endPos(t, 'destino'), 'Destino guardado');
+  return out;
+}
+function lugarCerca(p) {
+  let best = null, bd = Infinity;
+  for (const x of lugares()) { const d = km(p, x.pos); if (d < bd) { bd = d; best = x; } }
+  return bd <= CERCA_DESTINO_KM ? best : null;
+}
+// Desde dónde se calcula: el sitio que elegiste a mano o tu ubicación (con el nombre del lugar guardado si estás en él).
+function origin() {
+  if (H.origen) return H.origen;
+  const h = stHere(); if (!h) return null;
+  const l = lugarCerca(h.p);
+  return { nombre: l ? l.nombre : 'Aquí', pos: h.p, aqui: true, cerca: l ? '' : streetNear(h.p) };
+}
+function lejosDe(t, p) {
+  const a = t && endPos(t, 'origen'), b = t && endPos(t, 'destino');
+  if (!a && !b) return false;
+  return !((a && km(p, a) <= CERCA_INICIO_KM) || (b && km(p, b) <= CERCA_INICIO_KM));
+}
+// Línea bajo «Casa → destino»: de dónde estás saliendo.
+function renderWhere() {
+  const el = $('where'); let t = '';
+  if (cfg.temp) {
+    const o = cfg.origen, nm = o.nombre !== 'Aquí' ? o.nombre : '';
+    if (tab === 'ida') t = nm ? (o.aqui ? 'Estás en ' : 'Sales desde ') + nm : 'Desde tu ubicación' + (o.cerca ? ' · ' + o.cerca + ' (aprox.)' : '');
+    else t = 'Vuelta a ' + (nm || o.cerca || 'donde estabas');
+  } else if (store.trips.length) {
+    const h = stHere(), from = endPos(cfg, tab === 'ida' ? 'origen' : 'destino');
+    if (h && from && km(h.p, from) <= CERCA_DESTINO_KM) t = 'Estás en ' + names(cfg).from;
+  }
+  el.hidden = !t; el.innerHTML = t ? ICON_NAV + esc(t) : '';
+}
+function cuando(at) {
+  const d = new Date(at), days = Math.round((new Date(new Date().toDateString()) - new Date(d.toDateString())) / 864e5);
+  if (days <= 0) return 'Hoy';
+  if (days === 1) return 'Ayer';
+  if (days < 7) return d.toLocaleDateString('es-ES', { weekday: 'long' }).replace(/^./, (c) => c.toUpperCase());
+  return d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+}
+function addRecent(d) {
+  store.recent = [{ nombre: d.nombre, detalle: d.detalle || '', pos: d.pos, tipo: d.tipo || '', at: Date.now() }]
+    .concat(store.recent.filter((r) => !(norm(r.nombre) === norm(d.nombre) && km(r.pos, d.pos) < 0.15))).slice(0, 8);
+  save();
+}
+
+function openHome() {
+  H.q = ''; H.msg = null; H.pick = false; H.pend = null; H.busy = ''; H.origen = null; $('hq').value = '';
+  $('home').hidden = false; document.body.style.overflow = 'hidden'; $('home').scrollTop = 0;
+  hRender();
+  ensureLibs().then(() => { if ($('home').hidden) return; if (H.q.trim()) hSearch(); else hRender(); }).catch(() => {});
+  if (!stHere() && !locDenied) autoTab();
+}
+function closeHome() { $('home').hidden = true; document.body.style.overflow = ''; }
+function hRender() {
+  const o = origin(); let w;
+  if (H.pick) w = '<span>Elige el punto de salida</span><button data-h="cancel">Cancelar</button>';
+  else if (H.origen) w = ICON_NAV + '<span>Sales desde ' + esc(H.origen.nombre) + '</span><button data-h="loc">Usar mi ubicación</button>';
+  else if (o) w = ICON_NAV + '<span>' + (o.nombre !== 'Aquí' ? 'Estás en ' + esc(o.nombre) : o.cerca ? 'Estás en ' + esc(o.cerca) + ' <small>(aprox.)</small>' : 'Usando tu ubicación') + '</span><button data-h="otro">Salgo de otro sitio</button>';
+  else if (locDenied || !navigator.geolocation) w = '<span>Sin tu ubicación</span><button data-h="otro">Elegir desde dónde sales</button>';
+  else w = '<span>Buscando tu ubicación…</span><button data-h="otro">Salgo de otro sitio</button>';
+  $('hwhere').innerHTML = w;
+  $('hq-t').textContent = H.pick ? '¿Desde dónde sales?' : '¿A dónde vas?';
+  const q = $('hq');
+  q.placeholder = H.pick ? 'Tu calle, una parada…' : 'Una calle, un sitio, un barrio…';
+  q.setAttribute('aria-label', H.pick ? 'Desde dónde sales' : 'A dónde vas');
+  $('hclose').hidden = !(cfg.temp || store.trips.length);
+  hBody();
+}
+function hBody() {
+  const box = $('hbody'), o = origin();
+  if (H.busy) { box.innerHTML = '<div class="here">' + ICON_PIN + '<span><b>Buscando cómo llegar a ' + esc(H.busy) + '…</b><small>Paradas y buses desde ' + esc(o && o.nombre !== 'Aquí' ? o.nombre : 'donde estás') + '</small></span></div>'; return; }
+  let h = '';
+  if (H.msg) h += '<div class="wcard"><b>' + esc(H.msg.t) + '</b>' + (H.msg.s ? '<p class="note">' + esc(H.msg.s) + '</p>' : '') + (H.msg.anyway ? '<button class="bigbtn" data-h="anyway">Ver los buses igualmente</button>' : '') + '</div>';
+  if (H.q.trim()) {
+    if (!LIB) h += '<p class="note">Cargando…</p>';
+    else if (H.res.length) h += '<div class="lst">' + H.res.map((r, i) => '<button class="hrow" data-k="' + i + '"><span class="ht"><b>' + esc(r.nombre) + '</b><small>' + esc(TIPO[r.tipo] || '') + (r.detalle ? ' · ' + esc(r.detalle) : '') + '</small></span></button>').join('') + '</div>' + (H.searching ? '<p class="note">Buscando más…</p>' : '');
+    else h += '<p class="note">' + (H.searching ? 'Buscando…' : 'Sin resultados. Prueba con el nombre de la calle o de un sitio conocido.') + '</p>';
+    box.innerHTML = h; return;
+  }
+  if (!store.trips.length && !H.pick && !H.msg) h += '<p class="note" style="font-size:15px">Dinos a dónde vas. <b style="color:var(--ink)">La parada y el bus te los damos nosotros.</b></p>';
+  const yo = o && o.pos, todos = lugares(), hayCasa = todos.some((x) => esCasa(x.nombre));
+  const sh = stHere();
+  if (H.pick && sh) h += '<div class="lst"><button class="hrow" data-h="loc"><span class="hi">' + ICON_NAV + '</span><span class="ht"><b>Usar mi ubicación</b><small>' + esc(streetNear(sh.p) || 'Donde estás ahora') + '</small></span></button></div>';
+  H.rows = todos.filter((x) => !(yo && !H.pick && km(yo, x.pos) <= CERCA_DESTINO_KM)).sort((a, b) => esCasa(b.nombre) - esCasa(a.nombre));
+  const rows = H.rows.map((x, i) => {
+    const casa = esCasa(x.nombre);
+    return '<button class="hrow" data-g="' + i + '"><span class="hi' + (casa ? ' home' : '') + '">' + (casa ? IC_HOME : IC_STAR) + '</span><span class="ht"><b>' + esc(casa && !H.pick ? 'Volver a casa' : x.nombre) + '</b><small>' + esc(casa ? 'Casa' : x.sub) + '</small></span>' + ICON.chev + '</button>';
+  });
+  const addCasa = !hayCasa && !H.pick ? '<button class="hadd" data-h="lugar"><i>' + IC_PLUS + '</i><span><b>Guarda tu casa</b><small>' + (sh ? 'Para volver con un toque desde donde estés' : 'Hazlo cuando estés en casa, con la ubicación activada') + '</small></span></button>' : '';
+  if (rows.length || addCasa) h += '<div class="lab">Guardados</div>' + (rows.length ? '<div class="lst">' + rows.join('') + '</div>' : '') + addCasa;
+  if (!H.pick) {
+    H.rec = store.recent.filter((r) => r && r.pos && !todos.some((x) => km(x.pos, r.pos) < 0.15) && !(yo && km(yo, r.pos) <= CERCA_DESTINO_KM)).slice(0, 4);
+    if (H.rec.length) h += '<div class="lab">Recientes</div><div class="lst">' + H.rec.map((r, i) => '<button class="hrow" data-r="' + i + '"><span class="hi">' + IC_CLOCK + '</span><span class="ht"><b>' + esc(r.nombre) + '</b><small>' + esc(cuando(r.at)) + '</small></span></button>').join('') + '</div>';
+  }
+  H.pop = LIB ? LIB.B.populares('').filter((r) => !todos.some((x) => km(x.pos, r.pos) < 0.15)) : [];
+  if (H.pop.length) h += '<div class="lab">Sugeridos</div><div class="grid2">' + H.pop.map((r, i) => '<button class="pop" data-p="' + i + '"><b>' + esc(r.nombre) + '</b><small>' + esc(r.detalle) + '</small></button>').join('') + '</div>';
+  else if (!LIB) h += '<p class="note">Cargando sitios…</p>';
+  box.innerHTML = h;
+}
+function hSearch() {
+  const q = H.q;
+  if (!LIB) { hBody(); return; }
+  H.res = LIB.B.mezclar(q, [], LIB.meta);
+  H.searching = q.trim().length >= 3;
+  hBody();
+  clearTimeout(hTimer);
+  if (!H.searching) return;
+  hTimer = setTimeout(async () => {
+    const o = origin();
+    const rem = await LIB.B.remoto(q, { base: PROXY, cerca: (o && o.pos) || null });
+    if (H.q !== q) return;
+    H.searching = false; H.res = LIB.B.mezclar(q, rem, LIB.meta); hBody();
+  }, 350);
+}
+function hPick(r) {
+  if (!r) return;
+  const d = { nombre: r.nombre, pos: r.pos, detalle: r.detalle || '', tipo: r.tipo || '' };
+  H.q = ''; $('hq').value = '';
+  if (H.pick) { H.origen = { nombre: d.nombre, pos: d.pos }; H.pick = false; H.msg = null; const p = H.pend; H.pend = null; hRender(); if (p) goTo(p); return; }
+  goTo(d);
+}
+function sinBus(pl, d) {
+  const lejos = wDist(pl.walkM), m = pl.walkMin;
+  if (pl.slower) return { t: 'Andando llegas antes', s: 'Está a ' + lejos + ', unos ' + m + ' min a pie. En bus tardarías más, contando lo que andas hasta la parada y desde ella.', anyway: d };
+  if (m <= 15) return { t: 'Mejor andando', s: 'Está a ' + lejos + ', unos ' + m + ' min a pie, y no hay ningún bus directo que te acerque.' };
+  return { t: 'No hay bus hasta ' + d.nombre, s: 'Ni directo ni con un cambio cerca de ti. Prueba con un sitio cercano.' };
+}
+async function goTo(d, anyway) {
+  const o = origin();
+  if (!o) { H.pend = d; H.pick = true; H.msg = { t: 'Primero, ¿desde dónde sales?', s: 'No vemos tu ubicación. Escribe tu calle o elige un sitio y te decimos cómo llegar a ' + d.nombre + '.' }; hRender(); return; }
+  // Un destino guardado que sale de aquí (o la vuelta, si estás en su destino) se abre tal cual, con tus paradas.
+  for (const t of store.trips) {
+    const a = endPos(t, 'origen'), b = endPos(t, 'destino'); if (!a || !b) continue;
+    const ida = km(o.pos, a) <= CERCA_INICIO_KM && km(d.pos, b) <= CERCA_DESTINO_KM;
+    const vta = km(o.pos, b) <= CERCA_INICIO_KM && km(d.pos, a) <= CERCA_DESTINO_KM;
+    if (ida || vta) { addRecent(d); closeHome(); setTrip(t.id, ida ? 'ida' : 'vuelta'); window.scrollTo(0, 0); return; }
+  }
+  if (km(o.pos, d.pos) <= 0.15) { H.msg = { t: 'Ya estás en ' + d.nombre }; hBody(); return; }
+  H.busy = d.nombre; H.msg = null; hBody();
+  try { await ensureLibs(); } catch (e) { H.busy = ''; H.msg = { t: 'No se pudieron cargar las paradas', s: 'Comprueba la conexión y vuelve a intentarlo.' }; hBody(); return; }
+  H.busy = '';
+  if ($('home').hidden) return;
+  const pl = planear(o.pos, d.pos, null, null, anyway);
+  addRecent(d);
+  const ida = chosenStops(pl.ida);
+  if (!ida.length) { H.msg = sinBus(pl, d); hBody(); $('home').scrollTop = 0; return; }
+  cfg = { id: 'aqui', temp: true, origen: { nombre: o.nombre, pos: o.pos, aqui: !!o.aqui, cerca: o.cerca || '' }, destino: d, ida, vuelta: chosenStops(pl.vta) };
+  tab = 'ida'; manual = true; byLoc = false; filt = null; manualFilt = false; nearId = null; H.origen = null;
+  closeHome(); save(); render(); refresh(); window.scrollTo(0, 0);
+}
+function hAct(e) {
+  const b = e.target.closest('button'); if (!b) return;
+  const a = b.dataset.h;
+  if (a === 'otro') { H.pick = true; H.q = ''; $('hq').value = ''; H.msg = null; hRender(); $('hq').focus(); }
+  else if (a === 'cancel') { H.pick = false; H.pend = null; H.msg = null; H.q = ''; $('hq').value = ''; hRender(); }
+  else if (a === 'loc') {
+    H.origen = null; H.pick = false; H.msg = null; H.q = ''; $('hq').value = ''; locDenied = false;
+    const p = H.pend; H.pend = null; hRender();
+    if (p && origin()) goTo(p); else autoTab();
+  }
+  else if (a === 'anyway') { const d = H.msg && H.msg.anyway; H.msg = null; if (d) goTo(d, true); }
+  else if (a === 'lugar') openSave('lugar', b);
+  else if (b.dataset.k != null) hPick(H.res[Number(b.dataset.k)]);
+  else if (b.dataset.g != null) hPick(H.rows[Number(b.dataset.g)]);
+  else if (b.dataset.r != null) hPick(H.rec[Number(b.dataset.r)]);
+  else if (b.dataset.p != null) hPick(H.pop[Number(b.dataset.p)]);
+}
+$('hwhere').onclick = hAct;
+$('hbody').onclick = hAct;
+$('hq').oninput = () => { H.q = $('hq').value; H.msg = null; hSearch(); };
+$('hclose').onclick = closeHome;
+$('home').addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('hclose').hidden) closeHome(); });
+$('godest').onclick = openHome;
+
+// «Guardar destino» (el destino temporal pasa a tus destinos) y «Guarda tu casa» (tu ubicación, con nombre).
+function saveBtn() {
+  const html = '<button class="dadd sv" data-a="savetemp"><i>' + IC_STAR + '</i>Guardar destino</button><p class="note" style="margin:-4px 6px 0">Aunque no lo guardes, lo tendrás en Recientes.</p>';
+  const hero = $('list').querySelector('.hero');
+  if (hero) hero.insertAdjacentHTML('afterend', html); else $('list').insertAdjacentHTML('afterbegin', html);
+}
+function openSave(mode, from) {
+  SV = { mode, from };
+  const lugar = mode === 'lugar', sh = stHere(), calle = sh ? streetNear(sh.p) : '';
+  $('sv-t').textContent = lugar ? 'Guarda tu casa' : 'Guardar destino';
+  $('sv-s').textContent = lugar ? (sh ? 'Donde estás ahora' + (calle ? ' · ' + calle : '') : 'Necesitamos tu ubicación: hazlo cuando estés allí.') : (cfg.destino.detalle || '');
+  $('sv-n').textContent = lugar ? 'Lo usamos como punto de salida y para «Volver a casa».' : 'Así lo verás en tus destinos. Puedes cambiarlo.';
+  $('svname').value = lugar ? 'Casa' : cfg.destino.nombre;
+  $('svq').innerHTML = (lugar ? ['Casa', 'Trabajo', 'Clase'] : ['Trabajo', 'Casa', 'Clase', 'Gimnasio']).map((n) => '<button data-n="' + esc(n) + '">' + esc(n) + '</button>').join('');
+  svCheck();
+  $('svsheet').hidden = false;
+  $('svname').focus();
+}
+function svCheck() { $('svok').disabled = !$('svname').value.trim() || (SV && SV.mode === 'lugar' && !stHere()); }
+function closeSave() { $('svsheet').hidden = true; const f = SV && SV.from; SV = null; if (f && document.contains(f)) f.focus(); }
+$('svname').oninput = svCheck;
+$('svq').onclick = (e) => { const b = e.target.closest('[data-n]'); if (b) { $('svname').value = b.dataset.n; svCheck(); } };
+$('svscrim').onclick = closeSave;
+$('svno').onclick = closeSave;
+$('svsheet').addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeSave();
+  else if (e.key === 'Enter' && e.target === $('svname') && !$('svok').disabled) $('svok').click();
+});
+$('svok').onclick = () => {
+  const n = $('svname').value.trim().slice(0, 40); if (!n || !SV) return;
+  if (SV.mode === 'lugar') {
+    const h = stHere(); if (!h) return;
+    store.lugares = store.lugares.filter((l) => norm(l.nombre) !== norm(n)).concat({ nombre: n, pos: h.p });
+    // Tus destinos que salen de aquí (guardados como «Rda. de Nelle») pasan a salir de «Casa».
+    const otros = new Set(store.lugares.map((l) => norm(l.nombre)));
+    for (const t of store.trips) { const a = endPos(t, 'origen'); if (a && km(a, h.p) <= CERCA_DESTINO_KM && !otros.has(norm(t.origen.nombre))) t.origen.nombre = n; }
+    save(); render(); closeSave(); hRender(); toast('Guardado: ' + n); return;
+  }
+  const T = cfg; if (!T.temp) { closeSave(); return; }
+  const o = T.origen;
+  const t = { id: 't' + Date.now().toString(36), origen: { nombre: o.nombre !== 'Aquí' ? o.nombre : (o.cerca || 'Mi ubicación'), pos: o.pos }, destino: { nombre: n, pos: T.destino.pos }, ida: T.ida, vuelta: T.vuelta };
+  if (T.pin) t.pin = T.pin;
+  store.trips.push(t); SV = null; $('svsheet').hidden = true;
+  setTrip(t.id, tab);
+  toast('Guardado en tus destinos');
+};
+
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) { hiddenAt = Date.now(); return; }
-  if (hiddenAt && Date.now() - hiddenAt > 5 * 60000) { manual = false; manualFilt = false; }
+  if (hiddenAt && Date.now() - hiddenAt > 5 * 60000) { manual = false; manualFilt = false; homeCheck = true; }
   autoTab();
   refresh();
 });
 
 render();
-if (!store.trips.length) openWizard({});
+if (!store.trips.length) openHome();
 autoTab();
 refresh().then(() => getMeta().then((m) => { meta = m || meta; render(); }).catch(() => {}));
 setInterval(refresh, 30000);
