@@ -215,6 +215,7 @@ main{max-width:640px;margin:0 auto;padding:10px 10px 14px;display:grid;gap:10px}
 .pinb[aria-pressed=true]{color:var(--red)}.pinb[aria-pressed=true] svg{fill:currentColor}
 .stop.pinned{box-shadow:0 0 0 2px var(--red)}
 .then{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.then>span{font-size:13px;color:var(--mute);font-weight:600;margin-right:2px}
+.t.gone{opacity:.7}.t.gone::before{animation:none}
 .none{padding:12px 14px;color:var(--mute);font-size:14px;border-top:1px solid var(--line)}.none.err{color:var(--red)}
 .missed{background:var(--card);border-radius:18px;overflow:hidden}
 .missed summary{list-style:none;display:flex;align-items:center;gap:10px;padding:10px 14px;min-height:52px;cursor:pointer;color:var(--mute)}
@@ -608,8 +609,8 @@ function goShort(b) {
   return '<span class="go ' + (s < 5 ? 'bad' : s < 10 ? 'warn' : 'ok') + '">' + (s <= 0 ? '¡sal ya!' : 'sal en ' + s + ' min') + '</span>';
 }
 function tchip(b) {
-  const why = b.prog ? '<span class="vh"> (horario programado)</span>' : b.ghost ? '<span class="vh"> (bus sin señal)</span>' : '';
-  return '<span class="t ' + src(b) + '">' + (b.left <= 1 && !b.prog ? '<span class="now">Llegando</span>' : hhmm(b.at) + '<small>' + b.left + ' min</small>') + why + '</span>';
+  const why = (b.miss ? '<span class="vh"> (pasa antes del que te da tiempo)</span>' : '') + (b.prog ? '<span class="vh"> (horario programado)</span>' : b.ghost ? '<span class="vh"> (bus sin señal)</span>' : '');
+  return '<span class="t ' + src(b) + (b.miss ? ' gone' : '') + '">' + (b.left <= 1 && !b.prog ? '<span class="now">Llegando</span>' : hhmm(b.at) + '<small>' + b.left + ' min</small>') + why + '</span>';
 }
 // ---------- Trayecto con un cambio (p. ej. 14 → 11) ----------
 // La entrada de la parada lleva `via`: { id: parada del 2.º bus, lines, baja, bus, pie, bus2, fin }.
@@ -726,6 +727,8 @@ function renderList(stops) {
   const fromPin = !!atPin[0];
   // Después del grande, las siguientes de la misma línea en la misma parada.
   const then = first ? all.filter((b) => b !== first && !b.miss && b.linea === first.linea && b.stop === first.stop).slice(0, 3) : [];
+  // El que está a punto de pasar y no te da tiempo: se ve como referencia (por si ya estás en la parada o lo ves llegar).
+  const gone = first && !first.miss ? all.filter((b) => b.miss && b.linea === first.linea && b.stop === first.stop && b.at < first.at).pop() : null;
   const hereOn = all.some((b) => b.walk != null);
   let hero = viaS ? viaHero(viaS) : '';
   if (first && !hero) {
@@ -735,12 +738,16 @@ function renderList(stops) {
       '<div class="when"><small>Pasa a las</small><b class="big">' + hhmm(first.at) + '</b></div>' +
       (first.left <= 1 && !first.prog ? '<span class="in now">Llegando</span>' : '<span class="in">en ' + first.left + ' min</span>') + '</div>' +
       '<div class="stp">' + esc(stopName(first.stop)) + '</div>' +
+      (gone ? '<div class="then"><span>' + (gone.left <= 3 ? 'Está llegando el de' : 'Antes pasa el de') + '</span>' + tchip(gone) + '</div>' : '') +
       (then.length ? '<div class="then"><span>Luego</span>' + then.map(tchip).join('') + '</div>' : '') + leaveBox(first) + '</section>';
   }
+  const shown = new Set(gone ? [gone] : []);
   const groups = stops.map((s) => {
     const bs = all.filter((b) => b.stop === s.id && !b.miss && b.fav); // las líneas apagadas en «Editar paradas» no salen
     const byLine = new Map();
     for (const b of bs) { if (!byLine.has(b.linea)) byLine.set(b.linea, []); byLine.get(b.linea).push(b); }
+    // Delante, atenuado, el último de cada línea al que ya no llegas (referencia: «ese es el que está pasando»).
+    for (const [l, list] of byLine) { const g = all.filter((b) => b.stop === s.id && b.fav && b.miss && b.linea === l).pop(); if (g) { shown.add(g); list.unshift(g); } }
     const lines = [...byLine.entries()].map(([l, list]) => ({ l: l, list: list.slice(0, 3), fav: list[0].fav }))
       .sort((a, b) => (b.fav - a.fav) || a.list[0].left - b.list[0].left).slice(0, 5);
     const lead = bs.find((b) => b.fav) || bs[0];
@@ -761,7 +768,7 @@ function renderList(stops) {
     return '<section class="stop' + (on ? ' pinned' : '') + '"><h3>' + ICON.pin + '<span class="nm">' + esc(shortName(g.s.id)) + '</span>' + goShort(g.lead && g.lead.fav ? g.lead : null) +
       (stops.length > 1 ? '<button class="pinb" data-pin="' + g.s.id + '" aria-pressed="' + on + '" aria-label="' + (on ? 'Dejar de fijar ' : 'Fijar arriba ') + esc(stopName(g.s.id)) + '">' + ICON.pinb + '</button>' : '') + '</h3>' + body + '</section>';
   };
-  const missed = favs.filter((b) => b.miss);
+  const missed = favs.filter((b) => b.miss && !shown.has(b));
   let missHtml = '';
   if (missed.length) {
     const per = new Map();
@@ -791,7 +798,7 @@ function walkTo(id) {
   const q = posOf(id); if (!q) return null;
   const m = km(here.p, q) * 1000;
   if (m > 2000) return null;
-  if (m < 60) return 0; // ya estás en la parada: sin margen
+  if (m < Math.max(60, here.acc)) return 0; // ya estás en la parada (dentro del error del GPS): sin margen
   return Math.ceil(m * RODEO / ANDAR_M_MIN) + margen();
 }
 function autoTab() {
@@ -814,7 +821,7 @@ function autoTab() {
       if (!manualFilt) filt = nearId;
       render();
       if (changed) refresh(); else tick();
-    }, (e) => { if (e && e.code === 1) { locDenied = true; render(); } }, { maximumAge: 60000, timeout: 10000, enableHighAccuracy: true });
+    }, (e) => { if (e && e.code === 1) { locDenied = true; render(); } }, { maximumAge: 10000, timeout: 10000, enableHighAccuracy: true });
   } catch (e) {}
 }
 
@@ -1495,7 +1502,7 @@ if (!store.trips.length) openWizard({});
 autoTab();
 refresh().then(() => getMeta().then((m) => { meta = m || meta; render(); }).catch(() => {}));
 setInterval(refresh, 30000);
-setInterval(autoTab, 45000);
+setInterval(() => { if (!document.hidden) autoTab(); }, 20000); // al ir andando a la parada, que se entere de que ya llegaste
 setInterval(() => { tick(); }, 1000);
 setInterval(render, 15000);
 }
