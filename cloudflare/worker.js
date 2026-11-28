@@ -147,7 +147,7 @@ async function handle(req, env, ctx) {
 
     // Archivos de la web (asistente, «Añadir parada», «Editar paradas»): el Worker los sirve
     // desde GitHub Pages en su propio dominio, para que la web los pida siempre a su mismo origen.
-    if (/^\/(planner\.js|buscador\.js|mapa\.js|vendor\/leaflet\/leaflet\.(?:js|css)|gtfs\/[a-z0-9_-]+(\/[a-z0-9_-]+)?\.json)$/i.test(url.pathname)) return serveStatic(url.pathname.slice(1));
+    if (/^\/(planner\.js|buscador\.js|mapa\.js|vendor\/leaflet\/leaflet\.(?:js|css)|vendor\/maplibre\/(?:maplibre-gl\.(?:js|css)|leaflet-maplibre-gl\.js)|gtfs\/[a-z0-9_-]+(\/[a-z0-9_-]+)?\.json)$/i.test(url.pathname)) return serveStatic(url.pathname.slice(1));
     // Logo: iconos de la app y la imagen para compartir (og.png).
     if (/^\/(og|favicon-32|apple-touch-icon|icon-192|icon-512|icon-maskable-512)\.png$/.test(url.pathname)) return serveStatic(url.pathname.slice(1));
 
