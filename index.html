@@ -200,7 +200,7 @@ main{max-width:640px;margin:0 auto;padding:10px 10px 14px;display:grid;gap:10px}
 .stop{background:var(--card);border-radius:18px;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,.05)}
 .stop>h3{margin:0;display:flex;align-items:center;gap:8px;padding:11px 14px;font-size:16px;font-weight:800;background:light-dark(#fafafb,#202026)}
 .stop>h3 .ic{color:var(--mute);flex:none}.stop>h3 .nm{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.go{font-size:13px;font-weight:800;white-space:nowrap}.go.ok{color:light-dark(#1e7a34,#6fd38f)}.go.warn{color:light-dark(#8a5300,#ffcf7a)}.go.bad{color:var(--red)}
+.go{font-size:13px;font-weight:800;white-space:nowrap}.go.ok{color:light-dark(#1e7a34,#6fd38f)}.go.warn{color:light-dark(#8a5300,#ffcf7a)}.go.bad{color:var(--red)}.go.walk{color:var(--mute);font-weight:600;display:inline-flex;align-items:center;gap:3px}.go.walk .ic{width:15px;height:15px}
 .ln{display:flex;align-items:center;gap:10px;padding:10px 14px;border-top:1px solid var(--line)}
 .ln .chip{min-width:44px;height:32px;font-size:15px;border-radius:9px;flex:none}.ln.other .chip{opacity:.7}
 .ts{flex:1;display:flex;gap:6px;flex-wrap:wrap}
@@ -681,12 +681,12 @@ function leaveWhy(walk, left) {
     : (buf > 0 ? 'si sales ya, llegas ' + buf + ' min antes' : 'si sales ya, llegas justo');
   return nw(real + ' min andando ·') + ' ' + nw(why);
 }
-// «sal en X min» corto, en la cabecera de cada parada.
+// En la cabecera de cada parada, solo cuánto se tarda andando (dato neutro, en gris).
+// El «Sal en X min» va únicamente en la tarjeta grande: repetido en cada parada («¡sal ya!» en rojo) confundía (Yomer, 28 nov).
 function goShort(b) {
   if (!b || b.walk == null) return '';
-  if (b.walk === 0) return '<span class="go ok">estás aquí</span>';
-  const s = b.left - b.walk;
-  return '<span class="go ' + (s < 5 ? 'bad' : s < 10 ? 'warn' : 'ok') + '">' + (s <= 0 ? '¡sal ya!' : 'sal en ' + s + ' min') + '</span>';
+  if (b.walk === 0) return '<span class="go walk">estás aquí</span>';
+  return '<span class="go walk">' + ICON.walk + Math.max(1, b.walk - margen()) + ' min</span>';
 }
 function tchip(b) {
   const why = (b.miss ? '<span class="vh"> (pasa antes del que te da tiempo)</span>' : '') + (b.prog ? '<span class="vh"> (horario programado)</span>' : b.ghost ? '<span class="vh"> (bus sin señal)</span>' : '');
